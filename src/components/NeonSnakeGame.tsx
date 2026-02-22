@@ -1,8 +1,11 @@
 import { useRef, useEffect, useState, useCallback } from "react";
+import { Settings } from "lucide-react";
+import { toast } from "sonner";
 
 // --- Types ---
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
 type GameState = "idle" | "playing" | "paused" | "gameover";
+type ControlScheme = "arrows" | "qwerty" | "azerty";
 interface Point { x: number; y: number; }
 
 const CELL = 20;
@@ -18,6 +21,30 @@ const OPPOSITE: Record<Direction, Direction> = {
   UP: "DOWN", DOWN: "UP", LEFT: "RIGHT", RIGHT: "LEFT",
 };
 
+const CONTROL_MAPS: Record<ControlScheme, Record<string, Direction>> = {
+  arrows: {
+    ArrowUp: "UP", ArrowDown: "DOWN", ArrowLeft: "LEFT", ArrowRight: "RIGHT",
+  },
+  qwerty: {
+    w: "UP", W: "UP", s: "DOWN", S: "DOWN", a: "LEFT", A: "LEFT", d: "RIGHT", D: "RIGHT",
+  },
+  azerty: {
+    z: "UP", Z: "UP", s: "DOWN", S: "DOWN", q: "LEFT", Q: "LEFT", d: "RIGHT", D: "RIGHT",
+  },
+};
+
+const CONTROL_LABELS: Record<ControlScheme, string> = {
+  arrows: "Arrows",
+  qwerty: "WASD",
+  azerty: "ZQSD",
+};
+
+const SCHEME_HINT: Record<ControlScheme, string> = {
+  arrows: "Arrow keys to move",
+  qwerty: "WASD keys to move",
+  azerty: "ZQSD keys to move",
+};
+
 function randomFood(snake: Point[]): Point {
   let p: Point;
   do {
@@ -30,6 +57,13 @@ const NeonSnakeGame = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameLoopRef = useRef<number>(0);
   const lastTickRef = useRef(0);
+
+  const [controlScheme, setControlScheme] = useState<ControlScheme>(() => {
+    const stored = localStorage.getItem("arcade-control-scheme");
+    return (stored as ControlScheme) || "arrows";
+  });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const controlSchemeRef = useRef(controlScheme);
 
   const [gameState, setGameState] = useState<GameState>("idle");
   const [score, setScore] = useState(0);
@@ -53,8 +87,19 @@ const NeonSnakeGame = () => {
     setIsTouchDevice("ontouchstart" in window || navigator.maxTouchPoints > 0);
   }, []);
 
-  // Sync state ref
+  // Sync refs
   useEffect(() => { stateRef.current = gameState; }, [gameState]);
+  useEffect(() => { controlSchemeRef.current = controlScheme; }, [controlScheme]);
+
+  const handleSchemeChange = useCallback((scheme: ControlScheme) => {
+    setControlScheme(scheme);
+    localStorage.setItem("arcade-control-scheme", scheme);
+    setSettingsOpen(false);
+    toast(`Controls set to ${CONTROL_LABELS[scheme]}`, {
+      duration: 2000,
+      className: "font-pixel",
+    });
+  }, []);
 
   const resetGame = useCallback(() => {
     snakeRef.current = [{ x: 10, y: 10 }];
@@ -83,14 +128,10 @@ const NeonSnakeGame = () => {
     nextDirRef.current = d;
   }, []);
 
-  // Keyboard
+  // Keyboard — dynamically reads controlSchemeRef
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const map: Record<string, Direction> = {
-        ArrowUp: "UP", ArrowDown: "DOWN", ArrowLeft: "LEFT", ArrowRight: "RIGHT",
-        w: "UP", s: "DOWN", a: "LEFT", d: "RIGHT",
-        W: "UP", S: "DOWN", A: "LEFT", D: "RIGHT",
-      };
+      const map = CONTROL_MAPS[controlSchemeRef.current];
       if (map[e.key]) {
         e.preventDefault();
         changeDirection(map[e.key]);
@@ -125,18 +166,15 @@ const NeonSnakeGame = () => {
         case "RIGHT": head.x++; break;
       }
 
-      // Wall collision
       if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
         endGame(); return;
       }
-      // Self collision
       if (snake.some((s) => s.x === head.x && s.y === head.y)) {
         endGame(); return;
       }
 
       snake.unshift(head);
 
-      // Eat food
       if (head.x === foodRef.current.x && head.y === foodRef.current.y) {
         scoreRef.current += 10;
         setScore(scoreRef.current);
@@ -173,11 +211,9 @@ const NeonSnakeGame = () => {
         }
       }
 
-      // Clear
       ctx.fillStyle = "hsl(230, 25%, 7%)";
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-      // Grid
       ctx.strokeStyle = "hsla(230, 20%, 18%, 0.5)";
       ctx.lineWidth = 0.5;
       for (let x = 0; x <= WIDTH; x += CELL) {
@@ -187,7 +223,6 @@ const NeonSnakeGame = () => {
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WIDTH, y); ctx.stroke();
       }
 
-      // Food (pulsating pink)
       const pulse = 0.6 + 0.4 * Math.sin(timestamp * 0.005);
       const fx = foodRef.current.x * CELL;
       const fy = foodRef.current.y * CELL;
@@ -198,7 +233,6 @@ const NeonSnakeGame = () => {
       ctx.fillRect(fx + 2, fy + 2, CELL - 4, CELL - 4);
       ctx.restore();
 
-      // Snake
       const snake = snakeRef.current;
       snake.forEach((seg, i) => {
         const t = 1 - i / snake.length;
@@ -215,7 +249,6 @@ const NeonSnakeGame = () => {
         ctx.restore();
       });
 
-      // Border glow
       ctx.save();
       ctx.shadowColor = "hsl(190, 100%, 50%)";
       ctx.shadowBlur = 8;
@@ -229,20 +262,57 @@ const NeonSnakeGame = () => {
     return () => cancelAnimationFrame(gameLoopRef.current);
   }, [best]);
 
-  // D-pad handler
   const dpad = (dir: Direction) => (e: React.TouchEvent) => {
     e.preventDefault();
     changeDirection(dir);
   };
 
+  const schemes: ControlScheme[] = ["arrows", "qwerty", "azerty"];
+
   return (
     <div className="flex flex-col items-center gap-4 w-full max-w-[440px] mx-auto px-4">
-      {/* Score Bar */}
+      {/* Score Bar + Settings */}
       <div className="flex items-center justify-between w-full max-w-[400px]">
         <div className="glass rounded-lg px-4 py-2">
           <span className="text-[10px] text-muted-foreground block">SCORE</span>
           <span className="font-pixel text-sm text-primary neon-text-cyan">{score}</span>
         </div>
+
+        {/* Control Scheme Selector */}
+        <div className="relative">
+          <button
+            onClick={() => setSettingsOpen((o) => !o)}
+            className="glass rounded-lg p-2.5 text-muted-foreground hover:text-primary transition-colors"
+            aria-label="Control settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+
+          {settingsOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setSettingsOpen(false)} />
+              <div className="absolute top-full right-0 mt-2 z-50 glass rounded-lg p-1.5 neon-glow-cyan min-w-[140px]">
+                {schemes.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => handleSchemeChange(s)}
+                    className={`w-full text-left px-3 py-2 rounded-md text-xs transition-colors ${
+                      controlScheme === s
+                        ? "bg-primary/20 text-primary neon-text-cyan font-semibold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <span className="font-pixel text-[9px]">{CONTROL_LABELS[s]}</span>
+                    <span className="block text-[10px] mt-0.5 opacity-60">
+                      {s === "arrows" ? "↑ ↓ ← →" : s === "qwerty" ? "W A S D" : "Z Q S D"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
         <div className="glass rounded-lg px-4 py-2 text-right">
           <span className="text-[10px] text-muted-foreground block">BEST</span>
           <span className="font-pixel text-sm text-neon-yellow">{best}</span>
@@ -264,7 +334,7 @@ const NeonSnakeGame = () => {
           <div className="absolute inset-0 flex flex-col items-center justify-center glass rounded-lg">
             <h2 className="font-pixel text-sm text-primary neon-text-cyan mb-4">NEON SNAKE</h2>
             <p className="text-muted-foreground text-sm mb-6 text-center px-4">
-              Arrow keys or WASD to move
+              {SCHEME_HINT[controlScheme]}
             </p>
             <button
               onClick={startGame}
@@ -306,7 +376,7 @@ const NeonSnakeGame = () => {
         )}
       </div>
 
-      {/* Pause button for playing state */}
+      {/* Pause button */}
       {gameState === "playing" && (
         <button
           onClick={togglePause}
