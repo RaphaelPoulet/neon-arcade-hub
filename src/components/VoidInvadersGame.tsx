@@ -70,7 +70,7 @@ const SCHEME_HINT: Record<ControlScheme, string> = {
 // --- Helpers ---
 function createAlienGrid(wave: number): Alien[] {
   const aliens: Alien[] = [];
-  const offsetY = Math.min(wave * 8, 80);
+  const offsetY = Math.min(wave * 3, 30);
   for (let r = 0; r < ALIEN_ROWS; r++) {
     for (let c = 0; c < ALIEN_COLS; c++) {
       aliens.push({
@@ -347,7 +347,7 @@ const VoidInvadersGame = () => {
           if (hitEdge) {
             alienDirRef.current *= -1;
             for (const a of aliveAliens) {
-              a.y += ALIEN_H + 4;
+              a.y += 10;
             }
           } else {
             for (const a of aliveAliens) {
