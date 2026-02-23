@@ -183,7 +183,8 @@ const VoidInvadersGame = () => {
       bossRef.current = null;
     }
     alienDirRef.current = 1;
-    alienSpeedRef.current = 0.5 + waveNum * 0.15;
+    // Wave 1 base speed is gentle (0.35), ramps ~8% per wave
+    alienSpeedRef.current = 0.35 + waveNum * 0.08;
     alienShootTimerRef.current = 0;
     playerBulletsRef.current = [];
     alienBulletsRef.current = [];
@@ -328,10 +329,11 @@ const VoidInvadersGame = () => {
         const aliveAliens = aliens.filter(a => a.alive);
 
         if (aliveAliens.length > 0) {
-          // Classic speed: inversely proportional to remaining aliens
+          // Intra-wave speedup: multiplier of current wave's base speed
           const totalAliens = ALIEN_ROWS * ALIEN_COLS;
           const killed = totalAliens - aliveAliens.length;
-          const speedMult = 1 + (killed / totalAliens) * 4;
+          const killRatio = killed / totalAliens;
+          const speedMult = 1 + killRatio * 3; // gentler curve (was *4)
           const moveSpeed = alienSpeedRef.current * speedMult * dt;
 
           // Move horizontally
@@ -346,8 +348,12 @@ const VoidInvadersGame = () => {
 
           if (hitEdge) {
             alienDirRef.current *= -1;
+            // Vertical descent: starts small, grows ~7% per wave
+            const baseDrop = 5;
+            const waveDrop = baseDrop * (1 + waveRef.current * 0.07);
+            const dropDistance = Math.min(waveDrop, 18); // cap so it never teleports
             for (const a of aliveAliens) {
-              a.y += 10;
+              a.y += dropDistance;
             }
           } else {
             for (const a of aliveAliens) {
