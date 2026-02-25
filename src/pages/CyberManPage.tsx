@@ -16,7 +16,7 @@ const CyberManPage = () => {
         >
           <div className="text-center mb-6">
             <h1 className="font-pixel text-lg sm:text-xl text-neon-yellow neon-text-cyan mb-2">
-              Cyber-Man
+              Phantom Maze
             </h1>
             <p className="text-sm text-muted-foreground">
               Navigate the neon maze. Consume all pellets. Survive.
