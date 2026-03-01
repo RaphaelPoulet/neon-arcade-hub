@@ -24,10 +24,10 @@ const COLS = 28;
 const ROWS = 31;
 const W = COLS * TILE;
 const H = ROWS * TILE;
-const PAC_SPEED = 0.08; // tiles per ms
-const GHOST_SPEED = 0.07;
-const GHOST_FRIGHT_SPEED = 0.035;
-const GHOST_EATEN_SPEED = 0.14;
+const PAC_SPEED = 0.005; // tiles per ms (~5 tiles/sec)
+const GHOST_SPEED = 0.0045;
+const GHOST_FRIGHT_SPEED = 0.0025;
+const GHOST_EATEN_SPEED = 0.009;
 const FRIGHT_DUR = 6000;
 const SCATTER_DUR = 7000;
 const CHASE_DUR = 20000;
@@ -179,7 +179,7 @@ const CyberManGame = () => {
   const [gameState, setGameState] = useState<GameState>("idle");
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(() => {
-    const s = localStorage.getItem("cyber-man-best");
+    const s = localStorage.getItem("phantom-maze-best");
     return s ? parseInt(s, 10) : 0;
   });
   const [lives, setLives] = useState(3);
@@ -299,24 +299,25 @@ const CyberManGame = () => {
     const ctx = canvas.getContext("2d")!;
     let prev = 0;
 
-    const moveEntity = (entity: { x: number; y: number; dir: Direction }, speed: number, dt: number, maze: number[][]) => {
-      const tx = entity.x + DX[entity.dir];
-      const ty = entity.y + DY[entity.dir];
-      // only move if target is walkable (already decided at tile center)
+    // Move entity toward next tile center; clamp so it never overshoots
+    const moveEntity = (entity: { x: number; y: number; dir: Direction }, speed: number, dt: number): boolean => {
       const move = speed * dt;
-      entity.x += DX[entity.dir] * move;
-      entity.y += DY[entity.dir] * move;
+      const dx = DX[entity.dir];
+      const dy = DY[entity.dir];
 
-      // Snap when passing tile center
-      const rx = Math.round(entity.x);
-      const ry = Math.round(entity.y);
-      const overshootX = DX[entity.dir] !== 0 && ((DX[entity.dir] > 0 && entity.x >= rx && entity.x - move < rx) || (DX[entity.dir] < 0 && entity.x <= rx && entity.x - move > rx));
-      const overshootY = DY[entity.dir] !== 0 && ((DY[entity.dir] > 0 && entity.y >= ry && entity.y - move < ry) || (DY[entity.dir] < 0 && entity.y <= ry && entity.y - move > ry));
+      entity.x += dx * move;
+      entity.y += dy * move;
 
-      if (Math.abs(entity.x - rx) < 0.05 && Math.abs(entity.y - ry) < 0.05) {
-        entity.x = rx;
-        entity.y = ry;
-      }
+      // Clamp to next tile center if overshot
+      const nextCX = Math.round(entity.x);
+      const nextCY = Math.round(entity.y);
+      if (dx > 0 && entity.x > nextCX) entity.x = nextCX;
+      if (dx < 0 && entity.x < nextCX) entity.x = nextCX;
+      if (dy > 0 && entity.y > nextCY) entity.y = nextCY;
+      if (dy < 0 && entity.y < nextCY) entity.y = nextCY;
+
+      // Check if at tile center
+      return Math.abs(entity.x - Math.round(entity.x)) < 0.001 && Math.abs(entity.y - Math.round(entity.y)) < 0.001;
     };
 
     const frame = (ts: number) => {
@@ -341,7 +342,7 @@ const CyberManGame = () => {
             if (scoreRef.current > bestRef.current) {
               bestRef.current = scoreRef.current;
               setBest(scoreRef.current);
-              localStorage.setItem("cyber-man-best", String(scoreRef.current));
+              localStorage.setItem("phantom-maze-best", String(scoreRef.current));
             }
             setGameState("gameover");
           } else {
@@ -361,24 +362,24 @@ const CyberManGame = () => {
         const cycle = SCATTER_DUR + CHASE_DUR;
         globalModeRef.current = (modeTimerRef.current % cycle) < SCATTER_DUR ? "scatter" : "chase";
 
-        // Player movement (tile-based)
+        // Player movement (strict tile-based)
         const px = Math.round(p.x), py = Math.round(p.y);
-        const atCenter = p.x === px && p.y === py;
+        const atCenter = Math.abs(p.x - px) < 0.001 && Math.abs(p.y - py) < 0.001;
 
         if (atCenter) {
-          // Try buffered direction
-          if (canGo(maze, px, py, p.nextDir)) p.dir = p.nextDir;
-          // Move if possible
+          p.x = px; p.y = py; // hard snap
+          // Try buffered direction first
+          if (canGo(maze, px, py, p.nextDir)) {
+            p.dir = p.nextDir;
+          }
+          // Move if current direction is walkable
           if (canGo(maze, px, py, p.dir)) {
-            moveEntity(p, PAC_SPEED, dt, maze);
+            moveEntity(p, PAC_SPEED, dt);
           }
+          // else: blocked, stay put
         } else {
-          moveEntity(p, PAC_SPEED, dt, maze);
-          // Snap at center
-          const npx = Math.round(p.x), npy = Math.round(p.y);
-          if (Math.abs(p.x - npx) < 0.05 && Math.abs(p.y - npy) < 0.05) {
-            p.x = npx; p.y = npy;
-          }
+          // Between tiles: keep moving, will snap at next center
+          moveEntity(p, PAC_SPEED, dt);
         }
 
         // Warp
@@ -446,14 +447,10 @@ const CyberManGame = () => {
             }
 
             if (canGo(maze, gx, gy, g.dir)) {
-              moveEntity(g, spd, dt, maze);
+              moveEntity(g, spd, dt);
             }
           } else {
-            moveEntity(g, spd, dt, maze);
-            const ngx = Math.round(g.x), ngy = Math.round(g.y);
-            if (Math.abs(g.x - ngx) < 0.05 && Math.abs(g.y - ngy) < 0.05) {
-              g.x = ngx; g.y = ngy;
-            }
+            moveEntity(g, spd, dt);
           }
 
           // Warp
