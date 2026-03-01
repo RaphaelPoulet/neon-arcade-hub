@@ -305,16 +305,20 @@ const CyberManGame = () => {
       const dx = DX[entity.dir];
       const dy = DY[entity.dir];
 
+      // Determine target tile center BEFORE moving
+      const startX = Math.round(entity.x);
+      const startY = Math.round(entity.y);
+      const targetX = startX + dx;
+      const targetY = startY + dy;
+
       entity.x += dx * move;
       entity.y += dy * move;
 
-      // Clamp to next tile center if overshot
-      const nextCX = Math.round(entity.x);
-      const nextCY = Math.round(entity.y);
-      if (dx > 0 && entity.x > nextCX) entity.x = nextCX;
-      if (dx < 0 && entity.x < nextCX) entity.x = nextCX;
-      if (dy > 0 && entity.y > nextCY) entity.y = nextCY;
-      if (dy < 0 && entity.y < nextCY) entity.y = nextCY;
+      // Clamp: don't overshoot the NEXT tile center (not current)
+      if (dx > 0 && entity.x > targetX) entity.x = targetX;
+      if (dx < 0 && entity.x < targetX) entity.x = targetX;
+      if (dy > 0 && entity.y > targetY) entity.y = targetY;
+      if (dy < 0 && entity.y < targetY) entity.y = targetY;
 
       // Check if at tile center
       return Math.abs(entity.x - Math.round(entity.x)) < 0.001 && Math.abs(entity.y - Math.round(entity.y)) < 0.001;
@@ -426,7 +430,7 @@ const CyberManGame = () => {
             : g.mode === "eaten" ? GHOST_EATEN_SPEED : GHOST_SPEED;
 
           const gx = Math.round(g.x), gy = Math.round(g.y);
-          const gAtC = g.x === gx && g.y === gy;
+          const gAtC = Math.abs(g.x - gx) < 0.001 && Math.abs(g.y - gy) < 0.001;
 
           if (gAtC) {
             if (g.mode === "eaten" && gx === g.home.x && gy === g.home.y) {
