@@ -299,29 +299,58 @@ const CyberManGame = () => {
     const ctx = canvas.getContext("2d")!;
     let prev = 0;
 
-    // Move entity toward next tile center; clamp so it never overshoots
+    // Snap threshold
+    const SNAP = 0.02;
+
+    // Check if entity is at tile center
+    const isAtCenter = (e: { x: number; y: number }) => {
+      return Math.abs(e.x - Math.round(e.x)) < SNAP && Math.abs(e.y - Math.round(e.y)) < SNAP;
+    };
+
+    // Snap entity to exact tile center
+    const snapToCenter = (e: { x: number; y: number }) => {
+      e.x = Math.round(e.x);
+      e.y = Math.round(e.y);
+    };
+
+    // Move entity one step toward the next tile center.
+    // MUST only be called after validating the direction is walkable.
+    // Returns true if entity arrived at a tile center.
     const moveEntity = (entity: { x: number; y: number; dir: Direction }, speed: number, dt: number): boolean => {
       const move = speed * dt;
       const dx = DX[entity.dir];
       const dy = DY[entity.dir];
 
-      // Determine target tile center BEFORE moving
-      const startX = Math.round(entity.x);
-      const startY = Math.round(entity.y);
-      const targetX = startX + dx;
-      const targetY = startY + dy;
+      // The tile we're heading toward
+      const tileX = Math.round(entity.x);
+      const tileY = Math.round(entity.y);
+      const targetX = tileX + (isAtCenter(entity) ? dx : (dx !== 0 ? (entity.x < tileX ? 0 : (entity.x > tileX ? 0 : dx)) : 0));
+      const targetY = tileY + (isAtCenter(entity) ? dy : (dy !== 0 ? (entity.y < tileY ? 0 : (entity.y > tileY ? 0 : dy)) : 0));
+
+      // If between tiles, target is the nearest center in the direction of travel
+      let destX: number, destY: number;
+      if (dx > 0) destX = Math.ceil(entity.x + 0.001);
+      else if (dx < 0) destX = Math.floor(entity.x - 0.001);
+      else destX = Math.round(entity.x);
+      
+      if (dy > 0) destY = Math.ceil(entity.y + 0.001);
+      else if (dy < 0) destY = Math.floor(entity.y - 0.001);
+      else destY = Math.round(entity.y);
 
       entity.x += dx * move;
       entity.y += dy * move;
 
-      // Clamp: don't overshoot the NEXT tile center (not current)
-      if (dx > 0 && entity.x > targetX) entity.x = targetX;
-      if (dx < 0 && entity.x < targetX) entity.x = targetX;
-      if (dy > 0 && entity.y > targetY) entity.y = targetY;
-      if (dy < 0 && entity.y < targetY) entity.y = targetY;
+      // Clamp: never overshoot destination tile center
+      if (dx > 0 && entity.x >= destX) entity.x = destX;
+      if (dx < 0 && entity.x <= destX) entity.x = destX;
+      if (dy > 0 && entity.y >= destY) entity.y = destY;
+      if (dy < 0 && entity.y <= destY) entity.y = destY;
 
-      // Check if at tile center
-      return Math.abs(entity.x - Math.round(entity.x)) < 0.001 && Math.abs(entity.y - Math.round(entity.y)) < 0.001;
+      if (isAtCenter(entity)) {
+        snapToCenter(entity);
+        return true;
+      }
+      return false;
     };
 
     const frame = (ts: number) => {
@@ -366,24 +395,40 @@ const CyberManGame = () => {
         const cycle = SCATTER_DUR + CHASE_DUR;
         globalModeRef.current = (modeTimerRef.current % cycle) < SCATTER_DUR ? "scatter" : "chase";
 
-        // Player movement (strict tile-based)
-        const px = Math.round(p.x), py = Math.round(p.y);
-        const atCenter = Math.abs(p.x - px) < 0.001 && Math.abs(p.y - py) < 0.001;
+        // Player movement (strict tile-based with canMove validator)
+        if (isAtCenter(p)) {
+          snapToCenter(p);
+          const px = p.x, py = p.y;
 
-        if (atCenter) {
-          p.x = px; p.y = py; // hard snap
           // Try buffered direction first
           if (canGo(maze, px, py, p.nextDir)) {
             p.dir = p.nextDir;
           }
-          // Move if current direction is walkable
+          // Move ONLY if current direction is walkable
           if (canGo(maze, px, py, p.dir)) {
             moveEntity(p, PAC_SPEED, dt);
           }
-          // else: blocked, stay put
+          // else: blocked → stay snapped at center
         } else {
-          // Between tiles: keep moving, will snap at next center
-          moveEntity(p, PAC_SPEED, dt);
+          // Between tiles: continue toward next center (already validated)
+          // Safety: check that the tile we're heading toward is still walkable
+          const nearX = Math.round(p.x), nearY = Math.round(p.y);
+          const aheadX = nearX + DX[p.dir], aheadY = nearY + DY[p.dir];
+          // Determine which tile center we're moving toward
+          let destTileX: number, destTileY: number;
+          if (DX[p.dir] > 0) destTileX = Math.ceil(p.x + 0.001);
+          else if (DX[p.dir] < 0) destTileX = Math.floor(p.x - 0.001);
+          else destTileX = Math.round(p.x);
+          if (DY[p.dir] > 0) destTileY = Math.ceil(p.y + 0.001);
+          else if (DY[p.dir] < 0) destTileY = Math.floor(p.y - 0.001);
+          else destTileY = Math.round(p.y);
+
+          if (walkable(maze, destTileX, destTileY)) {
+            moveEntity(p, PAC_SPEED, dt);
+          } else {
+            // Push back to nearest valid tile center
+            snapToCenter(p);
+          }
         }
 
         // Warp
@@ -429,10 +474,10 @@ const CyberManGame = () => {
           const spd = g.mode === "frightened" ? GHOST_FRIGHT_SPEED
             : g.mode === "eaten" ? GHOST_EATEN_SPEED : GHOST_SPEED;
 
-          const gx = Math.round(g.x), gy = Math.round(g.y);
-          const gAtC = Math.abs(g.x - gx) < 0.001 && Math.abs(g.y - gy) < 0.001;
+          if (isAtCenter(g)) {
+            snapToCenter(g);
+            const gx = g.x, gy = g.y;
 
-          if (gAtC) {
             if (g.mode === "eaten" && gx === g.home.x && gy === g.home.y) {
               g.mode = globalModeRef.current;
             }
@@ -450,11 +495,25 @@ const CyberManGame = () => {
               g.dir = pickDir(maze, gx, gy, tx, ty, g.dir, g.mode === "eaten");
             }
 
+            // Only move if direction is walkable
             if (canGo(maze, gx, gy, g.dir)) {
               moveEntity(g, spd, dt);
             }
           } else {
-            moveEntity(g, spd, dt);
+            // Between tiles: validate destination before continuing
+            let destTileX: number, destTileY: number;
+            if (DX[g.dir] > 0) destTileX = Math.ceil(g.x + 0.001);
+            else if (DX[g.dir] < 0) destTileX = Math.floor(g.x - 0.001);
+            else destTileX = Math.round(g.x);
+            if (DY[g.dir] > 0) destTileY = Math.ceil(g.y + 0.001);
+            else if (DY[g.dir] < 0) destTileY = Math.floor(g.y - 0.001);
+            else destTileY = Math.round(g.y);
+
+            if (walkable(maze, destTileX, destTileY)) {
+              moveEntity(g, spd, dt);
+            } else {
+              snapToCenter(g);
+            }
           }
 
           // Warp
@@ -485,7 +544,19 @@ const CyberManGame = () => {
       if (maze.length === 0) return;
 
       // Walls (static offscreen canvas)
-      if (wallCanvasRef.current) ctx.drawImage(wallCanvasRef.current, 0, 0);
+      // DEBUG: Draw red overlay on wall tiles (toggle with debugWalls)
+      const debugWalls = false; // Set to true to visualize collision map
+      if (debugWalls) {
+        ctx.fillStyle = "rgba(255, 0, 0, 0.25)";
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            if (maze[r][c] === 1) {
+              ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
+            }
+          }
+        }
+      }
+
 
       // Pellets
       for (let r = 0; r < ROWS; r++) {
