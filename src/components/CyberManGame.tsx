@@ -124,28 +124,44 @@ function buildWallCanvas(maze: number[][]): HTMLCanvasElement {
   c.height = H;
   const ctx = c.getContext("2d")!;
 
+  // Pass 1: Solid dark fill for all wall tiles
+  for (let r = 0; r < ROWS; r++) {
+    for (let col = 0; col < COLS; col++) {
+      if (maze[r][col] !== 1) continue;
+      ctx.fillStyle = "hsl(230, 40%, 8%)";
+      ctx.fillRect(col * TILE, r * TILE, TILE, TILE);
+    }
+  }
+
+  // Pass 2: Neon edge strokes on borders adjacent to walkable tiles
+  ctx.save();
   for (let r = 0; r < ROWS; r++) {
     for (let col = 0; col < COLS; col++) {
       if (maze[r][col] !== 1) continue;
       const x = col * TILE, y = r * TILE;
-      ctx.strokeStyle = "hsla(190, 100%, 50%, 0.5)";
-      ctx.lineWidth = 1;
-      ctx.shadowColor = "hsl(190, 100%, 50%)";
-      ctx.shadowBlur = 4;
 
       const top = r > 0 && maze[r - 1][col] !== 1;
       const bot = r < ROWS - 1 && maze[r + 1][col] !== 1;
       const lft = col > 0 && maze[r][col - 1] !== 1;
       const rgt = col < COLS - 1 && maze[r][col + 1] !== 1;
 
-      if (top) { ctx.beginPath(); ctx.moveTo(x, y + 0.5); ctx.lineTo(x + TILE, y + 0.5); ctx.stroke(); }
-      if (bot) { ctx.beginPath(); ctx.moveTo(x, y + TILE - 0.5); ctx.lineTo(x + TILE, y + TILE - 0.5); ctx.stroke(); }
-      if (lft) { ctx.beginPath(); ctx.moveTo(x + 0.5, y); ctx.lineTo(x + 0.5, y + TILE); ctx.stroke(); }
-      if (rgt) { ctx.beginPath(); ctx.moveTo(x + TILE - 0.5, y); ctx.lineTo(x + TILE - 0.5, y + TILE); ctx.stroke(); }
+      if (top || bot || lft || rgt) {
+        ctx.strokeStyle = "hsla(190, 100%, 55%, 0.7)";
+        ctx.lineWidth = 1.5;
+        ctx.shadowColor = "hsl(190, 100%, 50%)";
+        ctx.shadowBlur = 6;
+
+        if (top) { ctx.beginPath(); ctx.moveTo(x, y + 0.5); ctx.lineTo(x + TILE, y + 0.5); ctx.stroke(); }
+        if (bot) { ctx.beginPath(); ctx.moveTo(x, y + TILE - 0.5); ctx.lineTo(x + TILE, y + TILE - 0.5); ctx.stroke(); }
+        if (lft) { ctx.beginPath(); ctx.moveTo(x + 0.5, y); ctx.lineTo(x + 0.5, y + TILE); ctx.stroke(); }
+        if (rgt) { ctx.beginPath(); ctx.moveTo(x + TILE - 0.5, y); ctx.lineTo(x + TILE - 0.5, y + TILE); ctx.stroke(); }
+      }
     }
   }
+  ctx.restore();
 
   // Ghost door
+  ctx.save();
   for (let r = 0; r < ROWS; r++) {
     for (let col = 0; col < COLS; col++) {
       if (maze[r][col] !== 5) continue;
@@ -160,6 +176,7 @@ function buildWallCanvas(maze: number[][]): HTMLCanvasElement {
       ctx.stroke();
     }
   }
+  ctx.restore();
 
   return c;
 }
@@ -544,19 +561,9 @@ const CyberManGame = () => {
       if (maze.length === 0) return;
 
       // Walls (static offscreen canvas)
-      // DEBUG: Draw red overlay on wall tiles (toggle with debugWalls)
-      const debugWalls = false; // Set to true to visualize collision map
-      if (debugWalls) {
-        ctx.fillStyle = "rgba(255, 0, 0, 0.25)";
-        for (let r = 0; r < ROWS; r++) {
-          for (let c = 0; c < COLS; c++) {
-            if (maze[r][c] === 1) {
-              ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
-            }
-          }
-        }
+      if (wallCanvasRef.current) {
+        ctx.drawImage(wallCanvasRef.current, 0, 0);
       }
-
 
       // Pellets
       for (let r = 0; r < ROWS; r++) {
