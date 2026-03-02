@@ -5,8 +5,9 @@ import { toast } from "sonner";
 // --- Types ---
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
 type GameState = "idle" | "ready" | "playing" | "dying" | "levelcomplete" | "gameover";
-type GhostMode = "scatter" | "chase" | "frightened" | "eaten";
+type GhostMode = "scatter" | "chase" | "frightened" | "eaten" | "leaving";
 type ControlScheme = "arrows" | "qwerty" | "azerty";
+type GhostName = "blinky" | "pinky" | "inky" | "clyde";
 
 interface Ghost {
   x: number; y: number;
@@ -16,6 +17,16 @@ interface Ghost {
   scatterTarget: { x: number; y: number };
   home: { x: number; y: number };
   frightenedTimer: number;
+  name: GhostName;
+  exitDelay: number; // ms before leaving house
+}
+
+interface Fruit {
+  x: number; y: number;
+  timer: number; // ms remaining
+  points: number;
+  symbol: string;
+  active: boolean;
 }
 
 // --- Constants ---
@@ -24,17 +35,29 @@ const COLS = 28;
 const ROWS = 31;
 const W = COLS * TILE;
 const H = ROWS * TILE;
-const PAC_SPEED = 0.005; // tiles per ms (~5 tiles/sec)
+const PAC_SPEED = 0.005;
 const GHOST_SPEED = 0.0045;
 const GHOST_FRIGHT_SPEED = 0.0025;
 const GHOST_EATEN_SPEED = 0.009;
+const GHOST_LEAVING_SPEED = 0.003;
 const FRIGHT_DUR = 6000;
 const SCATTER_DUR = 7000;
 const CHASE_DUR = 20000;
+const FRUIT_DURATION = 10000;
+const GHOST_HOUSE_EXIT = { x: 14, y: 11 }; // tile above door
 
 const OPPOSITE: Record<Direction, Direction> = { UP: "DOWN", DOWN: "UP", LEFT: "RIGHT", RIGHT: "LEFT" };
 const DX: Record<Direction, number> = { UP: 0, DOWN: 0, LEFT: -1, RIGHT: 1 };
 const DY: Record<Direction, number> = { UP: -1, DOWN: 1, LEFT: 0, RIGHT: 0 };
+
+// Fruit types by level
+const FRUIT_TABLE: { symbol: string; points: number }[] = [
+  { symbol: "🍒", points: 100 },
+  { symbol: "🍓", points: 300 },
+  { symbol: "🍊", points: 500 },
+  { symbol: "🍎", points: 700 },
+  { symbol: "🍇", points: 1000 },
+];
 
 // 0=empty 1=wall 2=pellet 3=power 4=house 5=door 6=tunnel
 const MAZE_TPL: number[][] = [
@@ -81,9 +104,18 @@ const CTRL_HINT: Record<ControlScheme, string> = { arrows: "Arrow keys to move",
 
 // --- Helpers ---
 function walkable(maze: number[][], c: number, r: number): boolean {
-  if (r === 14 && (c < 0 || c >= COLS)) return true; // tunnel
+  if (r === 14 && (c < 0 || c >= COLS)) return true;
   if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return false;
   return maze[r][c] !== 1;
+}
+
+function walkableGhost(maze: number[][], c: number, r: number, allowDoor: boolean): boolean {
+  if (r === 14 && (c < 0 || c >= COLS)) return true;
+  if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return false;
+  const t = maze[r][c];
+  if (t === 1) return false;
+  if (t === 5 && !allowDoor) return false;
+  return true;
 }
 
 function canGo(maze: number[][], c: number, r: number, d: Direction): boolean {
@@ -102,8 +134,7 @@ function pickDir(maze: number[][], gx: number, gy: number, tx: number, ty: numbe
   for (const d of dirs) {
     if (d === opp) continue;
     const nx = gx + DX[d], ny = gy + DY[d];
-    if (!walkable(maze, nx, ny)) continue;
-    if (!allowDoor && maze[ny]?.[nx] === 5 && d === "DOWN") continue;
+    if (!walkableGhost(maze, nx, ny, allowDoor)) continue;
     const dd = dist2(nx, ny, tx, ty);
     if (dd < bestD) { bestD = dd; best = d; }
   }
@@ -115,6 +146,44 @@ function randomDir(maze: number[][], gx: number, gy: number, cur: Direction): Di
   const opp = OPPOSITE[cur];
   const valid = dirs.filter(d => d !== opp && walkable(maze, gx + DX[d], gy + DY[d]));
   return valid.length > 0 ? valid[Math.floor(Math.random() * valid.length)] : opp;
+}
+
+// Ghost AI targeting per personality
+function getGhostTarget(
+  ghost: Ghost,
+  pac: { x: number; y: number; dir: Direction },
+  blinky: Ghost
+): { x: number; y: number } {
+  switch (ghost.name) {
+    case "blinky":
+      // Direct chase: target Pac-Man's current tile
+      return { x: Math.round(pac.x), y: Math.round(pac.y) };
+
+    case "pinky": {
+      // Ambush: target 4 tiles ahead of Pac-Man
+      const px = Math.round(pac.x) + DX[pac.dir] * 4;
+      const py = Math.round(pac.y) + DY[pac.dir] * 4;
+      return { x: px, y: py };
+    }
+
+    case "inky": {
+      // Flanker: vector from Blinky to 2 tiles ahead of Pac-Man, doubled
+      const ahead2x = Math.round(pac.x) + DX[pac.dir] * 2;
+      const ahead2y = Math.round(pac.y) + DY[pac.dir] * 2;
+      const vecX = ahead2x - Math.round(blinky.x);
+      const vecY = ahead2y - Math.round(blinky.y);
+      return { x: ahead2x + vecX, y: ahead2y + vecY };
+    }
+
+    case "clyde": {
+      // Shy: chase if far, scatter if close (8 tile radius)
+      const d = dist2(ghost.x, ghost.y, pac.x, pac.y);
+      if (d > 64) { // 8^2
+        return { x: Math.round(pac.x), y: Math.round(pac.y) };
+      }
+      return ghost.scatterTarget; // bottom-left corner
+    }
+  }
 }
 
 // --- Build static wall canvas ---
@@ -213,12 +282,16 @@ const CyberManGame = () => {
   const levelRef = useRef(1);
   const bestRef = useRef(best);
   const pelletsRef = useRef(0);
+  const totalPelletsRef = useRef(0);
+  const pelletsEatenRef = useRef(0);
   const modeTimerRef = useRef(0);
   const globalModeRef = useRef<"scatter" | "chase">("scatter");
   const readyTRef = useRef(0);
   const dyingTRef = useRef(0);
   const lvlCompTRef = useRef(0);
   const comboRef = useRef(0);
+  const fruitRef = useRef<Fruit>({ x: 14, y: 17, timer: 0, points: 0, symbol: "", active: false });
+  const fruitSpawnedRef = useRef<Set<number>>(new Set());
 
   useEffect(() => { setIsTouchDevice("ontouchstart" in window || navigator.maxTouchPoints > 0); }, []);
   useEffect(() => { sRef.current = gameState; }, [gameState]);
@@ -232,10 +305,10 @@ const CyberManGame = () => {
   }, []);
 
   const makeGhosts = useCallback((): Ghost[] => [
-    { x: 14, y: 11, dir: "LEFT", mode: "scatter", color: "hsl(0,100%,50%)", scatterTarget: { x: 25, y: 0 }, home: { x: 14, y: 14 }, frightenedTimer: 0 },
-    { x: 13, y: 14, dir: "UP", mode: "scatter", color: "hsl(330,100%,70%)", scatterTarget: { x: 2, y: 0 }, home: { x: 13, y: 14 }, frightenedTimer: 0 },
-    { x: 14, y: 14, dir: "UP", mode: "scatter", color: "hsl(190,100%,50%)", scatterTarget: { x: 25, y: 30 }, home: { x: 14, y: 14 }, frightenedTimer: 0 },
-    { x: 15, y: 14, dir: "UP", mode: "scatter", color: "hsl(30,100%,50%)", scatterTarget: { x: 2, y: 30 }, home: { x: 15, y: 14 }, frightenedTimer: 0 },
+    { x: 14, y: 11, dir: "LEFT", mode: "scatter", color: "hsl(0,100%,50%)", scatterTarget: { x: 25, y: 0 }, home: { x: 14, y: 14 }, frightenedTimer: 0, name: "blinky", exitDelay: 0 },
+    { x: 13, y: 14, dir: "UP", mode: "leaving", color: "hsl(330,100%,70%)", scatterTarget: { x: 2, y: 0 }, home: { x: 13, y: 14 }, frightenedTimer: 0, name: "pinky", exitDelay: 2000 },
+    { x: 14, y: 14, dir: "UP", mode: "leaving", color: "hsl(190,100%,50%)", scatterTarget: { x: 25, y: 30 }, home: { x: 14, y: 14 }, frightenedTimer: 0, name: "inky", exitDelay: 5000 },
+    { x: 15, y: 14, dir: "UP", mode: "leaving", color: "hsl(30,100%,50%)", scatterTarget: { x: 2, y: 30 }, home: { x: 15, y: 14 }, frightenedTimer: 0, name: "clyde", exitDelay: 8000 },
   ], []);
 
   const initMaze = useCallback(() => {
@@ -244,6 +317,8 @@ const CyberManGame = () => {
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (maze[r][c] === 2 || maze[r][c] === 3) p++;
     mazeRef.current = maze;
     pelletsRef.current = p;
+    totalPelletsRef.current = p;
+    pelletsEatenRef.current = 0;
     wallCanvasRef.current = buildWallCanvas(maze);
   }, []);
 
@@ -265,6 +340,8 @@ const CyberManGame = () => {
     livesRef.current = 3;
     levelRef.current = 1;
     comboRef.current = 0;
+    fruitRef.current = { x: 14, y: 17, timer: 0, points: 0, symbol: "", active: false };
+    fruitSpawnedRef.current = new Set();
     setScore(0); setLives(3); setLevel(1);
     globalModeRef.current = "scatter";
     modeTimerRef.current = 0;
@@ -281,6 +358,8 @@ const CyberManGame = () => {
     globalModeRef.current = "scatter";
     modeTimerRef.current = 0;
     comboRef.current = 0;
+    fruitRef.current = { x: 14, y: 17, timer: 0, points: 0, symbol: "", active: false };
+    fruitSpawnedRef.current = new Set();
     readyTRef.current = 2000;
     setGameState("ready");
   }, [initMaze, makeGhosts]);
@@ -316,40 +395,20 @@ const CyberManGame = () => {
     const ctx = canvas.getContext("2d")!;
     let prev = 0;
 
-    // Snap threshold
     const SNAP = 0.02;
+    const isAtCenter = (e: { x: number; y: number }) =>
+      Math.abs(e.x - Math.round(e.x)) < SNAP && Math.abs(e.y - Math.round(e.y)) < SNAP;
+    const snapToCenter = (e: { x: number; y: number }) => { e.x = Math.round(e.x); e.y = Math.round(e.y); };
 
-    // Check if entity is at tile center
-    const isAtCenter = (e: { x: number; y: number }) => {
-      return Math.abs(e.x - Math.round(e.x)) < SNAP && Math.abs(e.y - Math.round(e.y)) < SNAP;
-    };
-
-    // Snap entity to exact tile center
-    const snapToCenter = (e: { x: number; y: number }) => {
-      e.x = Math.round(e.x);
-      e.y = Math.round(e.y);
-    };
-
-    // Move entity one step toward the next tile center.
-    // MUST only be called after validating the direction is walkable.
-    // Returns true if entity arrived at a tile center.
     const moveEntity = (entity: { x: number; y: number; dir: Direction }, speed: number, dt: number): boolean => {
       const move = speed * dt;
       const dx = DX[entity.dir];
       const dy = DY[entity.dir];
 
-      // The tile we're heading toward
-      const tileX = Math.round(entity.x);
-      const tileY = Math.round(entity.y);
-      const targetX = tileX + (isAtCenter(entity) ? dx : (dx !== 0 ? (entity.x < tileX ? 0 : (entity.x > tileX ? 0 : dx)) : 0));
-      const targetY = tileY + (isAtCenter(entity) ? dy : (dy !== 0 ? (entity.y < tileY ? 0 : (entity.y > tileY ? 0 : dy)) : 0));
-
-      // If between tiles, target is the nearest center in the direction of travel
       let destX: number, destY: number;
       if (dx > 0) destX = Math.ceil(entity.x + 0.001);
       else if (dx < 0) destX = Math.floor(entity.x - 0.001);
       else destX = Math.round(entity.x);
-      
       if (dy > 0) destY = Math.ceil(entity.y + 0.001);
       else if (dy < 0) destY = Math.floor(entity.y - 0.001);
       else destY = Math.round(entity.y);
@@ -357,17 +416,29 @@ const CyberManGame = () => {
       entity.x += dx * move;
       entity.y += dy * move;
 
-      // Clamp: never overshoot destination tile center
       if (dx > 0 && entity.x >= destX) entity.x = destX;
       if (dx < 0 && entity.x <= destX) entity.x = destX;
       if (dy > 0 && entity.y >= destY) entity.y = destY;
       if (dy < 0 && entity.y <= destY) entity.y = destY;
 
-      if (isAtCenter(entity)) {
-        snapToCenter(entity);
-        return true;
-      }
+      if (isAtCenter(entity)) { snapToCenter(entity); return true; }
       return false;
+    };
+
+    // Move ghost toward a specific coordinate (for leaving house)
+    const moveToward = (g: Ghost, tx: number, ty: number, speed: number, dt: number): boolean => {
+        const ddx = tx - g.x;
+        const ddy = ty - g.y;
+        void ddx; void ddy;
+      const move = speed * dt;
+
+      if (Math.abs(ddx) > 0.02) {
+        g.x += Math.sign(ddx) * Math.min(move, Math.abs(ddx));
+      } else if (Math.abs(ddy) > 0.02) {
+        g.y += Math.sign(ddy) * Math.min(move, Math.abs(ddy));
+      }
+
+      return Math.abs(g.x - tx) < 0.05 && Math.abs(g.y - ty) < 0.05;
     };
 
     const frame = (ts: number) => {
@@ -379,6 +450,7 @@ const CyberManGame = () => {
       const maze = mazeRef.current;
       const p = pRef.current;
       const ghosts = ghostsRef.current;
+      const blinky = ghosts[0]; // Reference for Inky's targeting
 
       // --- Timers ---
       if (state === "ready") {
@@ -407,31 +479,18 @@ const CyberManGame = () => {
 
       // --- Playing logic ---
       if (state === "playing") {
-        // Global mode
+        // Global mode cycling
         modeTimerRef.current += dt;
         const cycle = SCATTER_DUR + CHASE_DUR;
         globalModeRef.current = (modeTimerRef.current % cycle) < SCATTER_DUR ? "scatter" : "chase";
 
-        // Player movement (strict tile-based with canMove validator)
+        // Player movement
         if (isAtCenter(p)) {
           snapToCenter(p);
           const px = p.x, py = p.y;
-
-          // Try buffered direction first
-          if (canGo(maze, px, py, p.nextDir)) {
-            p.dir = p.nextDir;
-          }
-          // Move ONLY if current direction is walkable
-          if (canGo(maze, px, py, p.dir)) {
-            moveEntity(p, PAC_SPEED, dt);
-          }
-          // else: blocked → stay snapped at center
+          if (canGo(maze, px, py, p.nextDir)) p.dir = p.nextDir;
+          if (canGo(maze, px, py, p.dir)) moveEntity(p, PAC_SPEED, dt);
         } else {
-          // Between tiles: continue toward next center (already validated)
-          // Safety: check that the tile we're heading toward is still walkable
-          const nearX = Math.round(p.x), nearY = Math.round(p.y);
-          const aheadX = nearX + DX[p.dir], aheadY = nearY + DY[p.dir];
-          // Determine which tile center we're moving toward
           let destTileX: number, destTileY: number;
           if (DX[p.dir] > 0) destTileX = Math.ceil(p.x + 0.001);
           else if (DX[p.dir] < 0) destTileX = Math.floor(p.x - 0.001);
@@ -440,12 +499,8 @@ const CyberManGame = () => {
           else if (DY[p.dir] < 0) destTileY = Math.floor(p.y - 0.001);
           else destTileY = Math.round(p.y);
 
-          if (walkable(maze, destTileX, destTileY)) {
-            moveEntity(p, PAC_SPEED, dt);
-          } else {
-            // Push back to nearest valid tile center
-            snapToCenter(p);
-          }
+          if (walkable(maze, destTileX, destTileY)) moveEntity(p, PAC_SPEED, dt);
+          else snapToCenter(p);
         }
 
         // Warp
@@ -461,28 +516,81 @@ const CyberManGame = () => {
             scoreRef.current += 10;
             setScore(scoreRef.current);
             pelletsRef.current--;
+            pelletsEatenRef.current++;
           } else if (t === 3) {
             maze[cy][cx] = 0;
             scoreRef.current += 50;
             setScore(scoreRef.current);
             pelletsRef.current--;
+            pelletsEatenRef.current++;
             comboRef.current = 0;
             for (const g of ghosts) {
-              if (g.mode !== "eaten") {
+              if (g.mode !== "eaten" && g.mode !== "leaving") {
                 g.mode = "frightened";
                 g.frightenedTimer = FRIGHT_DUR;
                 g.dir = OPPOSITE[g.dir];
               }
             }
           }
+
+          // Fruit spawning at 70 and 170 pellets eaten
+          const eaten = pelletsEatenRef.current;
+          for (const threshold of [70, 170]) {
+            if (eaten >= threshold && !fruitSpawnedRef.current.has(threshold)) {
+              fruitSpawnedRef.current.add(threshold);
+              const lvlIdx = Math.min(levelRef.current - 1, FRUIT_TABLE.length - 1);
+              const ft = FRUIT_TABLE[lvlIdx];
+              fruitRef.current = { x: 14, y: 17, timer: FRUIT_DURATION, points: ft.points, symbol: ft.symbol, active: true };
+            }
+          }
+
           if (pelletsRef.current <= 0) {
             lvlCompTRef.current = 2000;
             setGameState("levelcomplete");
           }
         }
 
+        // Fruit timer
+        if (fruitRef.current.active) {
+          fruitRef.current.timer -= dt;
+          if (fruitRef.current.timer <= 0) fruitRef.current.active = false;
+
+          // Check if pac-man eats the fruit
+          if (dist2(p.x, p.y, fruitRef.current.x, fruitRef.current.y) < 0.64) {
+            scoreRef.current += fruitRef.current.points;
+            setScore(scoreRef.current);
+            fruitRef.current.active = false;
+          }
+        }
+
         // Ghost logic
         for (const g of ghosts) {
+          // Handle "leaving" house state
+          if (g.mode === "leaving") {
+            g.exitDelay -= dt;
+            if (g.exitDelay > 0) continue; // wait before leaving
+
+            // Move to center-x of house, then up to exit
+            const houseCenterX = 14;
+            const exitY = GHOST_HOUSE_EXIT.y;
+
+            if (Math.abs(g.x - houseCenterX) > 0.1) {
+              // Move horizontally to center
+              moveToward(g, houseCenterX, g.y, GHOST_LEAVING_SPEED, dt);
+            } else if (Math.abs(g.y - exitY) > 0.1) {
+              // Move up to exit
+              g.x = houseCenterX;
+              moveToward(g, houseCenterX, exitY, GHOST_LEAVING_SPEED, dt);
+            } else {
+              // Arrived at exit
+              g.x = GHOST_HOUSE_EXIT.x;
+              g.y = GHOST_HOUSE_EXIT.y;
+              g.mode = globalModeRef.current;
+              g.dir = "LEFT";
+            }
+            continue;
+          }
+
           if (g.mode === "frightened") {
             g.frightenedTimer -= dt;
             if (g.frightenedTimer <= 0) g.mode = globalModeRef.current;
@@ -495,15 +603,27 @@ const CyberManGame = () => {
             snapToCenter(g);
             const gx = g.x, gy = g.y;
 
+            // Eaten ghost returns home, then leaves again
             if (g.mode === "eaten" && gx === g.home.x && gy === g.home.y) {
-              g.mode = globalModeRef.current;
+              g.mode = "leaving";
+              g.exitDelay = 0;
+              continue;
             }
 
             let tx: number, ty: number;
-            if (g.mode === "scatter") { tx = g.scatterTarget.x; ty = g.scatterTarget.y; }
-            else if (g.mode === "chase") { tx = Math.round(p.x); ty = Math.round(p.y); }
-            else if (g.mode === "eaten") { tx = g.home.x; ty = g.home.y; }
-            else { // frightened
+            if (g.mode === "scatter") {
+              tx = g.scatterTarget.x;
+              ty = g.scatterTarget.y;
+            } else if (g.mode === "chase") {
+              // Classic ghost AI personalities
+              const target = getGhostTarget(g, p, blinky);
+              tx = target.x;
+              ty = target.y;
+            } else if (g.mode === "eaten") {
+              tx = g.home.x;
+              ty = g.home.y;
+            } else {
+              // Frightened: random direction
               g.dir = randomDir(maze, gx, gy, g.dir);
               tx = 0; ty = 0;
             }
@@ -512,12 +632,8 @@ const CyberManGame = () => {
               g.dir = pickDir(maze, gx, gy, tx, ty, g.dir, g.mode === "eaten");
             }
 
-            // Only move if direction is walkable
-            if (canGo(maze, gx, gy, g.dir)) {
-              moveEntity(g, spd, dt);
-            }
+            if (canGo(maze, gx, gy, g.dir)) moveEntity(g, spd, dt);
           } else {
-            // Between tiles: validate destination before continuing
             let destTileX: number, destTileY: number;
             if (DX[g.dir] > 0) destTileX = Math.ceil(g.x + 0.001);
             else if (DX[g.dir] < 0) destTileX = Math.floor(g.x - 0.001);
@@ -526,11 +642,8 @@ const CyberManGame = () => {
             else if (DY[g.dir] < 0) destTileY = Math.floor(g.y - 0.001);
             else destTileY = Math.round(g.y);
 
-            if (walkable(maze, destTileX, destTileY)) {
-              moveEntity(g, spd, dt);
-            } else {
-              snapToCenter(g);
-            }
+            if (walkable(maze, destTileX, destTileY)) moveEntity(g, spd, dt);
+            else snapToCenter(g);
           }
 
           // Warp
@@ -544,7 +657,7 @@ const CyberManGame = () => {
               comboRef.current++;
               scoreRef.current += 200 * Math.pow(2, comboRef.current - 1);
               setScore(scoreRef.current);
-            } else if (g.mode !== "eaten") {
+            } else if (g.mode === "scatter" || g.mode === "chase") {
               livesRef.current--;
               setLives(livesRef.current);
               dyingTRef.current = 1500;
@@ -560,10 +673,8 @@ const CyberManGame = () => {
 
       if (maze.length === 0) return;
 
-      // Walls (static offscreen canvas)
-      if (wallCanvasRef.current) {
-        ctx.drawImage(wallCanvasRef.current, 0, 0);
-      }
+      // Walls
+      if (wallCanvasRef.current) ctx.drawImage(wallCanvasRef.current, 0, 0);
 
       // Pellets
       for (let r = 0; r < ROWS; r++) {
@@ -590,6 +701,22 @@ const CyberManGame = () => {
         }
       }
 
+      // Bonus Fruit
+      if (fruitRef.current.active) {
+        const fx = fruitRef.current.x * TILE + TILE / 2;
+        const fy = fruitRef.current.y * TILE + TILE / 2;
+        const pulse = 0.7 + 0.3 * Math.sin(ts * 0.008);
+
+        ctx.save();
+        ctx.shadowColor = "hsl(0, 100%, 70%)";
+        ctx.shadowBlur = 12 * pulse;
+        ctx.font = `${TILE}px serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(fruitRef.current.symbol, fx, fy);
+        ctx.restore();
+      }
+
       // Player
       if (state !== "dying" || dyingTRef.current > 500) {
         const ppx = p.x * TILE + TILE / 2;
@@ -611,7 +738,6 @@ const CyberManGame = () => {
         ctx.fill();
         ctx.restore();
       } else {
-        // Dying animation
         const progress = 1 - dyingTRef.current / 500;
         const ppx = p.x * TILE + TILE / 2;
         const ppy = p.y * TILE + TILE / 2;
