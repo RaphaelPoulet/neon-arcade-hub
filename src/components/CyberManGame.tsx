@@ -19,6 +19,9 @@ interface Ghost {
   frightenedTimer: number;
   name: GhostName;
   exitDelay: number; // ms before leaving house
+  pelletThreshold: number; // pellets eaten before ghost can leave
+  stuckFrames: number; // frames with zero movement (stuck detection)
+  lastX: number; lastY: number; // for stuck detection
 }
 
 interface Fruit {
@@ -330,10 +333,10 @@ const CyberManGame = () => {
   }, []);
 
   const makeGhosts = useCallback((): Ghost[] => [
-    { x: 14, y: 11, dir: "LEFT", mode: "scatter", color: "hsl(0,100%,50%)", scatterTarget: { x: 25, y: 0 }, home: { x: 14, y: 14 }, frightenedTimer: 0, name: "blinky", exitDelay: 0 },
-    { x: 13, y: 14, dir: "UP", mode: "leaving", color: "hsl(330,100%,70%)", scatterTarget: { x: 2, y: 0 }, home: { x: 13, y: 14 }, frightenedTimer: 0, name: "pinky", exitDelay: 2000 },
-    { x: 14, y: 14, dir: "UP", mode: "leaving", color: "hsl(190,100%,50%)", scatterTarget: { x: 25, y: 30 }, home: { x: 14, y: 14 }, frightenedTimer: 0, name: "inky", exitDelay: 5000 },
-    { x: 15, y: 14, dir: "UP", mode: "leaving", color: "hsl(30,100%,50%)", scatterTarget: { x: 2, y: 30 }, home: { x: 15, y: 14 }, frightenedTimer: 0, name: "clyde", exitDelay: 8000 },
+    { x: 14, y: 11, dir: "LEFT", mode: "scatter", color: "hsl(0,100%,50%)", scatterTarget: { x: 25, y: 0 }, home: { x: 14, y: 14 }, frightenedTimer: 0, name: "blinky", exitDelay: 0, pelletThreshold: 0, stuckFrames: 0, lastX: 14, lastY: 11 },
+    { x: 13, y: 14, dir: "UP", mode: "leaving", color: "hsl(330,100%,70%)", scatterTarget: { x: 2, y: 0 }, home: { x: 13, y: 14 }, frightenedTimer: 0, name: "pinky", exitDelay: 0, pelletThreshold: 0, stuckFrames: 0, lastX: 13, lastY: 14 },
+    { x: 14, y: 14, dir: "UP", mode: "leaving", color: "hsl(190,100%,50%)", scatterTarget: { x: 25, y: 30 }, home: { x: 14, y: 14 }, frightenedTimer: 0, name: "inky", exitDelay: 0, pelletThreshold: 30, stuckFrames: 0, lastX: 14, lastY: 14 },
+    { x: 15, y: 14, dir: "UP", mode: "leaving", color: "hsl(30,100%,50%)", scatterTarget: { x: 2, y: 30 }, home: { x: 15, y: 14 }, frightenedTimer: 0, name: "clyde", exitDelay: 0, pelletThreshold: 60, stuckFrames: 0, lastX: 15, lastY: 14 },
   ], []);
 
   const initMaze = useCallback(() => {
@@ -606,22 +609,19 @@ const CyberManGame = () => {
         for (const g of ghosts) {
           // Handle "leaving" house state
           if (g.mode === "leaving") {
-            g.exitDelay -= dt;
-            if (g.exitDelay > 0) continue; // wait before leaving
+            // Pellet-based exit: wait until enough pellets eaten
+            if (pelletsEatenRef.current < g.pelletThreshold) continue;
 
             // Move to center-x of house, then up to exit
             const houseCenterX = 14;
             const exitY = GHOST_HOUSE_EXIT.y;
 
             if (Math.abs(g.x - houseCenterX) > 0.1) {
-              // Move horizontally to center
               moveToward(g, houseCenterX, g.y, GHOST_LEAVING_SPEED, dt);
             } else if (Math.abs(g.y - exitY) > 0.1) {
-              // Move up to exit
               g.x = houseCenterX;
               moveToward(g, houseCenterX, exitY, GHOST_LEAVING_SPEED, dt);
             } else {
-              // Arrived at exit
               g.x = GHOST_HOUSE_EXIT.x;
               g.y = GHOST_HOUSE_EXIT.y;
               g.mode = globalModeRef.current;
@@ -630,37 +630,58 @@ const CyberManGame = () => {
             continue;
           }
 
+          // Eaten ghosts: use moveToward to ignore walls, go straight home
+          if (g.mode === "eaten") {
+            const arrived = moveToward(g, g.home.x, g.home.y, GHOST_EATEN_SPEED, dt);
+            if (arrived) {
+              g.x = g.home.x;
+              g.y = g.home.y;
+              g.mode = "leaving";
+              g.pelletThreshold = 0; // can exit immediately after respawn
+              g.stuckFrames = 0;
+            }
+            // Collision check for eaten (no kill)
+            continue;
+          }
+
           if (g.mode === "frightened") {
             g.frightenedTimer -= dt;
             if (g.frightenedTimer <= 0) g.mode = globalModeRef.current;
           }
 
-          const spd = g.mode === "frightened" ? GHOST_FRIGHT_SPEED
-            : g.mode === "eaten" ? GHOST_EATEN_SPEED : GHOST_SPEED;
+          const spd = g.mode === "frightened" ? GHOST_FRIGHT_SPEED : GHOST_SPEED;
+
+          // Stuck detection: if ghost hasn't moved for 10+ frames, force random direction
+          if (Math.abs(g.x - g.lastX) < 0.001 && Math.abs(g.y - g.lastY) < 0.001) {
+            g.stuckFrames++;
+          } else {
+            g.stuckFrames = 0;
+          }
+          g.lastX = g.x;
+          g.lastY = g.y;
+
+          if (g.stuckFrames > 10) {
+            // Force break deadlock: pick any available direction
+            const dirs: Direction[] = ["UP", "LEFT", "DOWN", "RIGHT"];
+            const valid = dirs.filter(d => walkable(maze, Math.round(g.x) + DX[d], Math.round(g.y) + DY[d]));
+            if (valid.length > 0) {
+              g.dir = valid[Math.floor(Math.random() * valid.length)];
+              g.stuckFrames = 0;
+            }
+          }
 
           if (isAtCenter(g)) {
             snapToCenter(g);
             const gx = g.x, gy = g.y;
-
-            // Eaten ghost returns home, then leaves again
-            if (g.mode === "eaten" && gx === g.home.x && gy === g.home.y) {
-              g.mode = "leaving";
-              g.exitDelay = 0;
-              continue;
-            }
 
             let tx: number, ty: number;
             if (g.mode === "scatter") {
               tx = g.scatterTarget.x;
               ty = g.scatterTarget.y;
             } else if (g.mode === "chase") {
-              // Classic ghost AI personalities
               const target = getGhostTarget(g, p, blinky);
               tx = target.x;
               ty = target.y;
-            } else if (g.mode === "eaten") {
-              tx = g.home.x;
-              ty = g.home.y;
             } else {
               // Frightened: flee away from Pac-Man
               g.dir = fleeDir(maze, gx, gy, Math.round(p.x), Math.round(p.y), g.dir);
@@ -668,10 +689,23 @@ const CyberManGame = () => {
             }
 
             if (g.mode !== "frightened") {
-              g.dir = pickDir(maze, gx, gy, tx, ty, g.dir, g.mode === "eaten");
+              g.dir = pickDir(maze, gx, gy, tx, ty, g.dir, false);
             }
 
-            if (canGo(maze, gx, gy, g.dir)) moveEntity(g, spd, dt);
+            // Always try to move - if canGo fails for current dir, try any dir
+            if (canGo(maze, gx, gy, g.dir)) {
+              moveEntity(g, spd, dt);
+            } else {
+              // Fallback: pick any walkable direction
+              const dirs: Direction[] = ["UP", "LEFT", "DOWN", "RIGHT"];
+              for (const d of dirs) {
+                if (canGo(maze, gx, gy, d)) {
+                  g.dir = d;
+                  moveEntity(g, spd, dt);
+                  break;
+                }
+              }
+            }
           } else {
             let destTileX: number, destTileY: number;
             if (DX[g.dir] > 0) destTileX = Math.ceil(g.x + 0.001);
