@@ -29,6 +29,13 @@ interface Fruit {
   active: boolean;
 }
 
+interface ScorePopup {
+  x: number; y: number; // pixel coords
+  text: string;
+  timer: number; // ms remaining
+  maxTimer: number;
+}
+
 // --- Constants ---
 const TILE = 16;
 const COLS = 28;
@@ -146,6 +153,24 @@ function randomDir(maze: number[][], gx: number, gy: number, cur: Direction): Di
   const opp = OPPOSITE[cur];
   const valid = dirs.filter(d => d !== opp && walkable(maze, gx + DX[d], gy + DY[d]));
   return valid.length > 0 ? valid[Math.floor(Math.random() * valid.length)] : opp;
+}
+
+// Flee direction: pick the tile that maximizes distance from pac-man
+function fleeDir(maze: number[][], gx: number, gy: number, px: number, py: number, cur: Direction): Direction {
+  const dirs: Direction[] = ["UP", "LEFT", "DOWN", "RIGHT"];
+  const opp = OPPOSITE[cur];
+  let best = cur;
+  let bestD = -1;
+  for (const d of dirs) {
+    if (d === opp) continue;
+    const nx = gx + DX[d], ny = gy + DY[d];
+    if (!walkable(maze, nx, ny)) continue;
+    const dd = dist2(nx, ny, px, py);
+    if (dd > bestD) { bestD = dd; best = d; }
+  }
+  // fallback if nothing found
+  if (bestD < 0) return randomDir(maze, gx, gy, cur);
+  return best;
 }
 
 // Ghost AI targeting per personality
@@ -292,7 +317,7 @@ const CyberManGame = () => {
   const comboRef = useRef(0);
   const fruitRef = useRef<Fruit>({ x: 14, y: 17, timer: 0, points: 0, symbol: "", active: false });
   const fruitSpawnedRef = useRef<Set<number>>(new Set());
-
+  const popupsRef = useRef<ScorePopup[]>([]);
   useEffect(() => { setIsTouchDevice("ontouchstart" in window || navigator.maxTouchPoints > 0); }, []);
   useEffect(() => { sRef.current = gameState; }, [gameState]);
   useEffect(() => { csRef.current = controlScheme; }, [controlScheme]);
@@ -332,6 +357,16 @@ const CyberManGame = () => {
     setGameState("ready");
   }, [makeGhosts]);
 
+  const spawnPopup = useCallback((tileX: number, tileY: number, text: string) => {
+    popupsRef.current.push({
+      x: tileX * TILE + TILE / 2,
+      y: tileY * TILE + TILE / 2,
+      text,
+      timer: 800,
+      maxTimer: 800,
+    });
+  }, []);
+
   const startGame = useCallback(() => {
     initMaze();
     ghostsRef.current = makeGhosts();
@@ -342,6 +377,7 @@ const CyberManGame = () => {
     comboRef.current = 0;
     fruitRef.current = { x: 14, y: 17, timer: 0, points: 0, symbol: "", active: false };
     fruitSpawnedRef.current = new Set();
+    popupsRef.current = [];
     setScore(0); setLives(3); setLevel(1);
     globalModeRef.current = "scatter";
     modeTimerRef.current = 0;
@@ -524,6 +560,7 @@ const CyberManGame = () => {
             pelletsRef.current--;
             pelletsEatenRef.current++;
             comboRef.current = 0;
+            spawnPopup(cx, cy, "+50");
             for (const g of ghosts) {
               if (g.mode !== "eaten" && g.mode !== "leaving") {
                 g.mode = "frightened";
@@ -557,8 +594,10 @@ const CyberManGame = () => {
 
           // Check if pac-man eats the fruit
           if (dist2(p.x, p.y, fruitRef.current.x, fruitRef.current.y) < 0.64) {
-            scoreRef.current += fruitRef.current.points;
+            const pts = fruitRef.current.points;
+            scoreRef.current += pts;
             setScore(scoreRef.current);
+            spawnPopup(fruitRef.current.x, fruitRef.current.y, `+${pts}`);
             fruitRef.current.active = false;
           }
         }
@@ -623,8 +662,8 @@ const CyberManGame = () => {
               tx = g.home.x;
               ty = g.home.y;
             } else {
-              // Frightened: random direction
-              g.dir = randomDir(maze, gx, gy, g.dir);
+              // Frightened: flee away from Pac-Man
+              g.dir = fleeDir(maze, gx, gy, Math.round(p.x), Math.round(p.y), g.dir);
               tx = 0; ty = 0;
             }
 
@@ -655,8 +694,10 @@ const CyberManGame = () => {
             if (g.mode === "frightened") {
               g.mode = "eaten";
               comboRef.current++;
-              scoreRef.current += 200 * Math.pow(2, comboRef.current - 1);
+              const pts = 200 * Math.pow(2, comboRef.current - 1);
+              scoreRef.current += pts;
               setScore(scoreRef.current);
+              spawnPopup(g.x, g.y, `+${pts}`);
             } else if (g.mode === "scatter" || g.mode === "chase") {
               livesRef.current--;
               setLives(livesRef.current);
@@ -665,6 +706,13 @@ const CyberManGame = () => {
             }
           }
         }
+
+        // Update score popups
+        popupsRef.current = popupsRef.current.filter(pop => {
+          pop.timer -= dt;
+          pop.y -= dt * 0.02; // float upward
+          return pop.timer > 0;
+        });
       }
 
       // === DRAW ===
@@ -760,13 +808,31 @@ const CyberManGame = () => {
         const r = TILE / 2 - 1;
 
         ctx.save();
+
+        if (g.mode === "eaten") {
+          // Eaten: draw ONLY glowing eyes, no body
+          const eox = DX[g.dir] * 2, eoy = DY[g.dir] * 2;
+          ctx.fillStyle = "white";
+          ctx.shadowColor = "hsl(190, 100%, 70%)";
+          ctx.shadowBlur = 6;
+          ctx.beginPath();
+          ctx.arc(gx_ - 3, gy_ - 3, 3, 0, Math.PI * 2);
+          ctx.arc(gx_ + 3, gy_ - 3, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "hsl(220, 80%, 20%)";
+          ctx.shadowBlur = 0;
+          ctx.beginPath();
+          ctx.arc(gx_ - 3 + eox, gy_ - 3 + eoy, 1.5, 0, Math.PI * 2);
+          ctx.arc(gx_ + 3 + eox, gy_ - 3 + eoy, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          continue;
+        }
+
         if (g.mode === "frightened") {
           const flash = g.frightenedTimer < 2000 && Math.floor(ts / 200) % 2 === 0;
           ctx.fillStyle = flash ? "hsl(0, 0%, 90%)" : "hsl(220, 80%, 60%)";
           ctx.shadowColor = flash ? "hsl(0, 0%, 90%)" : "hsl(220, 80%, 60%)";
-        } else if (g.mode === "eaten") {
-          ctx.fillStyle = "hsla(0, 0%, 100%, 0.3)";
-          ctx.shadowColor = "transparent";
         } else {
           ctx.fillStyle = g.color;
           ctx.shadowColor = g.color;
@@ -815,6 +881,21 @@ const CyberManGame = () => {
         ctx.restore();
       }
 
+      // Score Popups
+      for (const pop of popupsRef.current) {
+        const alpha = pop.timer / pop.maxTimer;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = "hsl(50, 100%, 80%)";
+        ctx.shadowColor = "hsl(50, 100%, 60%)";
+        ctx.shadowBlur = 8;
+        ctx.font = "bold 10px 'Press Start 2P'";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(pop.text, pop.x, pop.y);
+        ctx.restore();
+      }
+
       // Lives
       ctx.save();
       for (let i = 0; i < livesRef.current; i++) {
@@ -838,7 +919,7 @@ const CyberManGame = () => {
 
     loopRef.current = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(loopRef.current);
-  }, [resetPos, nextLvl]);
+  }, [resetPos, nextLvl, spawnPopup]);
 
   const dpad = (dir: Direction) => (e: React.TouchEvent) => {
     e.preventDefault();
