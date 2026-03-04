@@ -8,6 +8,7 @@ import GamePage from "./pages/GamePage";
 import NeonSnakePage from "./pages/NeonSnakePage";
 import VoidInvadersPage from "./pages/VoidInvadersPage";
 import PhantomMazePage from "./pages/CyberManPage";
+import NeonRacerPage from "./pages/NeonRacerPage";
 import Leaderboard from "./pages/Leaderboard";
 import NotFound from "./pages/NotFound";
 
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/game/neon-snake" element={<NeonSnakePage />} />
           <Route path="/game/void-invaders" element={<VoidInvadersPage />} />
           <Route path="/game/phantom-maze" element={<PhantomMazePage />} />
+          <Route path="/game/neon-racer" element={<NeonRacerPage />} />
           <Route path="/game/:slug" element={<GamePage />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="*" element={<NotFound />} />
