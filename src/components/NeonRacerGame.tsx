@@ -308,14 +308,20 @@ const NeonRacerGame = () => {
         spd = Math.max(0, Math.min(spd, maxSpd));
         speedRef.current = spd;
 
-        // steering with lerp
+        // steering with lerp — no lateral input = decelerate target back toward 0
         const steerAmt = STEER_SPEED * (spd / MAX_SPEED) * dt * 60;
-        if (isLeft(keys)) targetXRef.current -= steerAmt;
-        if (isRight(keys)) targetXRef.current += steerAmt;
+        const steeringLeft = isLeft(keys);
+        const steeringRight = isRight(keys);
+        if (steeringLeft) targetXRef.current -= steerAmt;
+        if (steeringRight) targetXRef.current += steerAmt;
+        // when no steering input, pull target back toward center
+        if (!steeringLeft && !steeringRight) {
+          targetXRef.current *= 0.92; // decay toward 0
+          if (Math.abs(targetXRef.current) < 0.01) targetXRef.current = 0;
+        }
         targetXRef.current = Math.max(-2.5, Math.min(2.5, targetXRef.current));
         // smooth interpolation
         playerXRef.current += (targetXRef.current - playerXRef.current) * STEER_LERP;
-
         // boost
         if (boostCoolRef.current > 0) boostCoolRef.current--;
         if (keys.has(" ") && boostRef.current <= 0 && boostCoolRef.current <= 0 && spd > MAX_SPEED * 0.3) {
