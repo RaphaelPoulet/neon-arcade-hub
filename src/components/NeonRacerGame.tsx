@@ -335,11 +335,22 @@ const NeonRacerGame = () => {
         const totalLength = TOTAL_SEGMENTS * SEG_LENGTH;
         if (posRef.current >= totalLength) posRef.current -= totalLength;
 
-        // centrifugal
+        // centrifugal — apply directly to playerX (visual drift), not to target
         const baseIdx = Math.floor(posRef.current / SEG_LENGTH) % TOTAL_SEGMENTS;
         const baseSeg = road[baseIdx];
         if (baseSeg) {
-          targetXRef.current += baseSeg.curve * CENTRIFUGAL * (spd / MAX_SPEED) * dt * 60;
+          playerXRef.current += baseSeg.curve * CENTRIFUGAL * (spd / MAX_SPEED) * dt * 60;
+        }
+
+        // off-road crash: immediate game over if beyond road boundary
+        if (Math.abs(playerXRef.current) > 1.3) {
+          floatingTextsRef.current.push({
+            x: W / 2, y: H * 0.4,
+            text: "OFF ROAD!",
+            life: 50, maxLife: 50,
+          });
+          stateRef.current = "gameover";
+          setGameState("gameover");
         }
 
         // timer countdown
