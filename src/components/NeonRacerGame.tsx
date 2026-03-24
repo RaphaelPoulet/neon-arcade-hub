@@ -376,6 +376,7 @@ const NeonRacerGame = () => {
         // time up = game over
         if (timerRef.current <= 0) {
           timerRef.current = 0;
+          crashReasonRef.current = "time";
           stateRef.current = "gameover";
           setGameState("gameover");
         }
