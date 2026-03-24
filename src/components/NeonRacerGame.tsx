@@ -392,6 +392,7 @@ const NeonRacerGame = () => {
           const eDist = (e.segIdx * SEG_LENGTH) - posRef.current;
           if (eDist > 0 && eDist < SEG_LENGTH * 2) {
             if (Math.abs(playerXRef.current - e.offset) < 0.4) {
+              crashReasonRef.current = "crash";
               stateRef.current = "gameover";
               setGameState("gameover");
               break;
