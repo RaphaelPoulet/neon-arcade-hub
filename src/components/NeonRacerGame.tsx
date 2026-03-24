@@ -194,6 +194,7 @@ const NeonRacerGame = () => {
   const lastCheckpointRef = useRef(0);
   const floatingTextsRef = useRef<FloatingText[]>([]);
   const controlSchemeRef = useRef(controlScheme);
+  const crashReasonRef = useRef<"crash" | "offroad" | "time">("crash");
 
   const handleSchemeChange = useCallback((scheme: ControlScheme) => {
     setControlScheme(scheme);
