@@ -351,6 +351,7 @@ const NeonRacerGame = () => {
             text: "OFF ROAD!",
             life: 50, maxLife: 50,
           });
+          crashReasonRef.current = "offroad";
           stateRef.current = "gameover";
           setGameState("gameover");
         }
