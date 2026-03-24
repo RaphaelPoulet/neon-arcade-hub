@@ -194,6 +194,7 @@ const NeonRacerGame = () => {
   const lastCheckpointRef = useRef(0);
   const floatingTextsRef = useRef<FloatingText[]>([]);
   const controlSchemeRef = useRef(controlScheme);
+  const crashReasonRef = useRef<"crash" | "offroad" | "time">("crash");
 
   const handleSchemeChange = useCallback((scheme: ControlScheme) => {
     setControlScheme(scheme);
@@ -241,6 +242,7 @@ const NeonRacerGame = () => {
     timerRef.current = INITIAL_TIME;
     lastCheckpointRef.current = 0;
     floatingTextsRef.current = [];
+    crashReasonRef.current = "crash";
     const enemies: EnemyCar[] = [];
     for (let i = 0; i < 60; i++) {
       enemies.push({
@@ -308,14 +310,20 @@ const NeonRacerGame = () => {
         spd = Math.max(0, Math.min(spd, maxSpd));
         speedRef.current = spd;
 
-        // steering with lerp
+        // steering with lerp — no lateral input = decelerate target back toward 0
         const steerAmt = STEER_SPEED * (spd / MAX_SPEED) * dt * 60;
-        if (isLeft(keys)) targetXRef.current -= steerAmt;
-        if (isRight(keys)) targetXRef.current += steerAmt;
+        const steeringLeft = isLeft(keys);
+        const steeringRight = isRight(keys);
+        if (steeringLeft) targetXRef.current -= steerAmt;
+        if (steeringRight) targetXRef.current += steerAmt;
+        // when no steering input, pull target back toward center
+        if (!steeringLeft && !steeringRight) {
+          targetXRef.current *= 0.92; // decay toward 0
+          if (Math.abs(targetXRef.current) < 0.01) targetXRef.current = 0;
+        }
         targetXRef.current = Math.max(-2.5, Math.min(2.5, targetXRef.current));
         // smooth interpolation
         playerXRef.current += (targetXRef.current - playerXRef.current) * STEER_LERP;
-
         // boost
         if (boostCoolRef.current > 0) boostCoolRef.current--;
         if (keys.has(" ") && boostRef.current <= 0 && boostCoolRef.current <= 0 && spd > MAX_SPEED * 0.3) {
@@ -329,11 +337,23 @@ const NeonRacerGame = () => {
         const totalLength = TOTAL_SEGMENTS * SEG_LENGTH;
         if (posRef.current >= totalLength) posRef.current -= totalLength;
 
-        // centrifugal
+        // centrifugal — apply directly to playerX (visual drift), not to target
         const baseIdx = Math.floor(posRef.current / SEG_LENGTH) % TOTAL_SEGMENTS;
         const baseSeg = road[baseIdx];
         if (baseSeg) {
-          targetXRef.current += baseSeg.curve * CENTRIFUGAL * (spd / MAX_SPEED) * dt * 60;
+          playerXRef.current += baseSeg.curve * CENTRIFUGAL * (spd / MAX_SPEED) * dt * 60;
+        }
+
+        // off-road crash: immediate game over if beyond road boundary
+        if (Math.abs(playerXRef.current) > 1.3) {
+          floatingTextsRef.current.push({
+            x: W / 2, y: H * 0.4,
+            text: "OFF ROAD!",
+            life: 50, maxLife: 50,
+          });
+          crashReasonRef.current = "offroad";
+          stateRef.current = "gameover";
+          setGameState("gameover");
         }
 
         // timer countdown
@@ -356,6 +376,7 @@ const NeonRacerGame = () => {
         // time up = game over
         if (timerRef.current <= 0) {
           timerRef.current = 0;
+          crashReasonRef.current = "time";
           stateRef.current = "gameover";
           setGameState("gameover");
         }
@@ -371,6 +392,7 @@ const NeonRacerGame = () => {
           const eDist = (e.segIdx * SEG_LENGTH) - posRef.current;
           if (eDist > 0 && eDist < SEG_LENGTH * 2) {
             if (Math.abs(playerXRef.current - e.offset) < 0.4) {
+              crashReasonRef.current = "crash";
               stateRef.current = "gameover";
               setGameState("gameover");
               break;
@@ -762,7 +784,7 @@ const NeonRacerGame = () => {
         {gameState === "gameover" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center glass rounded-lg">
             <h2 className="font-pixel text-sm text-secondary neon-text-pink mb-2">
-              {timerRef.current <= 0 ? "TIME'S UP" : "WRECKED"}
+              {crashReasonRef.current === "time" ? "TIME'S UP" : crashReasonRef.current === "offroad" ? "OFF ROAD!" : "WRECKED"}
             </h2>
             <p className="font-pixel text-xs text-primary neon-text-cyan mb-1">{distance}m</p>
             <p className="font-pixel text-xs text-primary neon-text-cyan mb-6">{score} PTS</p>
