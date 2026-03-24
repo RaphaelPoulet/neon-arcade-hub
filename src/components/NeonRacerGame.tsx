@@ -242,6 +242,7 @@ const NeonRacerGame = () => {
     timerRef.current = INITIAL_TIME;
     lastCheckpointRef.current = 0;
     floatingTextsRef.current = [];
+    crashReasonRef.current = "crash";
     const enemies: EnemyCar[] = [];
     for (let i = 0; i < 60; i++) {
       enemies.push({
