@@ -2,9 +2,10 @@ import { useRef, useEffect, useState, useCallback } from "react";
 import { Settings } from "lucide-react";
 import { toast } from "sonner";
 import GameOverLeaderboard from "@/components/GameOverLeaderboard";
+import { Progress } from "@/components/ui/progress";
 
 type ControlScheme = "arrows" | "qwerty" | "azerty";
-type GameState = "idle" | "playing" | "gameover";
+type GameState = "idle" | "playing" | "gameover" | "finished";
 
 const CONTROL_LABELS: Record<ControlScheme, string> = {
   arrows: "Arrows",
@@ -32,24 +33,22 @@ const CAM_DEPTH = 1 / Math.tan((FOV / 2) * (Math.PI / 180));
 
 /* ── gameplay ── */
 const MAX_SPEED = SEG_LENGTH * 60;
-const ACCEL = MAX_SPEED / 120;
-const BRAKE = -MAX_SPEED / 60;
-const DECEL = -MAX_SPEED / 360;
-const OFF_ROAD_DECEL = -MAX_SPEED / 30;
-const STEER_SPEED = 3 * 0.6;          // reduced by 40%
-const CENTRIFUGAL = 0.3;
-const BOOST_MULT = 2;
+const ACCEL = MAX_SPEED / 100;
+const BRAKE = -MAX_SPEED / 50;
+const DECEL = -MAX_SPEED / 300;          // engine braking (gentle)
+const OFF_ROAD_MAX_MULT = 0.3;           // 70% speed reduction off-road
+const STEER_SPEED = 3 * 0.6;
+const CENTRIFUGAL = 0.35;
+const BOOST_MULT = 1.8;
 const BOOST_DURATION = 90;
 const BOOST_COOLDOWN = 180;
-const STEER_LERP = 0.12;              // interpolation factor
+const STEER_LERP = 0.12;
 
-const TOTAL_SEGMENTS = 6000;
-const MAX_CURVE = 3.5;                // cap curve intensity
+const INITIAL_TIME = 45;
+const CHECKPOINT_TIME_ADD = 15;
 
-/* ── checkpoint ── */
-const CHECKPOINT_INTERVAL = 2000;     // units of distance (segments)
-const CHECKPOINT_TIME_ADD = 15;       // seconds added
-const INITIAL_TIME = 40;              // starting seconds
+/* ── screen shake ── */
+const SHAKE_INTENSITY = 4;
 
 /* ── colors ── */
 const COL_SKY_TOP = "#0a0020";
@@ -65,6 +64,38 @@ const COL_ROAD_LIGHT = "#222255";
 const COL_RUMBLE_DARK = "#FF007F";
 const COL_RUMBLE_LIGHT = "#00FFFF";
 const COL_LANE = "#ffffff30";
+const COL_FINISH_A = "#ffffff";
+const COL_FINISH_B = "#111111";
+
+/* ── track definition ── */
+interface TrackZone {
+  length: number;
+  curve: number;
+  hill?: number;
+  label?: string;
+}
+
+// The fixed circuit
+const TRACK_LAYOUT: TrackZone[] = [
+  { length: 200, curve: 0, label: "START STRAIGHT" },
+  { length: 120, curve: 2.5, label: "EASY LEFT" },
+  { length: 100, curve: 0 },
+  { length: 150, curve: -3, hill: 2500, label: "RIGHT BEND" },
+  { length: 80, curve: 0 },
+  { length: 100, curve: 2, label: "S-CURVE IN" },
+  { length: 100, curve: -2, label: "S-CURVE OUT" },
+  { length: 60, curve: 0 },
+  { length: 180, curve: -2.5, hill: 3000, label: "LONG RIGHT" },
+  { length: 100, curve: 0, label: "BACK STRAIGHT" },
+  { length: 130, curve: 3, hill: 1500, label: "HAIRPIN LEFT" },
+  { length: 80, curve: 0 },
+  { length: 100, curve: -1.5, label: "GENTLE RIGHT" },
+  { length: 60, curve: 0 },
+  { length: 120, curve: 2, hill: 2000, label: "UPHILL LEFT" },
+  { length: 80, curve: 0 },
+  { length: 100, curve: -3, label: "SHARP RIGHT" },
+  { length: 250, curve: 0, label: "FINAL STRAIGHT" },
+];
 
 interface Segment {
   z: number;
@@ -75,6 +106,8 @@ interface Segment {
   sprite?: "palm" | "car";
   spriteX?: number;
   checkpoint?: boolean;
+  finish?: boolean;
+  zoneLabel?: string;
 }
 
 interface EnemyCar {
@@ -90,58 +123,66 @@ interface FloatingText {
   maxLife: number;
 }
 
-function buildRoad(): Segment[] {
+function buildCircuit(): { segments: Segment[]; totalSegs: number; checkpointIndices: number[] } {
   const segs: Segment[] = [];
-  // Define curve zones with longer transitions (50% longer)
-  const curveZones: [number, number, number][] = [
-    [50, 375, 2], [450, 750, -3], [900, 1350, 3],
-    [1500, 1800, -2], [2100, 2700, 2.5], [3000, 3450, -3],
-    [3900, 4350, 2.5], [4650, 5100, -2],
-  ];
+  const checkpointIndices: number[] = [];
+  const RAMP = 40; // transition ramp length
 
-  for (let i = 0; i < TOTAL_SEGMENTS; i++) {
-    let curve = 0;
-    let y = 0;
+  let idx = 0;
+  for (const zone of TRACK_LAYOUT) {
+    for (let i = 0; i < zone.length; i++) {
+      let curve = zone.curve;
+      // Smooth ramp in/out
+      if (i < RAMP) curve *= i / RAMP;
+      else if (zone.length - i < RAMP) curve *= (zone.length - i) / RAMP;
 
-    for (const [start, end, c] of curveZones) {
-      if (i >= start && i < end) {
-        const len = end - start;
-        const rampIn = 60;  // longer ramp
-        const rampOut = 60;
-        let t = 1;
-        if (i - start < rampIn) t = (i - start) / rampIn;
-        else if (end - i < rampOut) t = (end - i) / rampOut;
-        curve = Math.max(-MAX_CURVE, Math.min(MAX_CURVE, c * t));
+      let y = 0;
+      if (zone.hill) {
+        y = Math.sin((i / zone.length) * Math.PI) * zone.hill;
       }
+
+      const seg: Segment = {
+        z: idx * SEG_LENGTH,
+        curve,
+        y,
+        px: 0, py: 0, pw: 0, pscale: 0,
+        clip: HEIGHT,
+      };
+
+      // Label first segment of zone
+      if (i === 0 && zone.label) {
+        seg.zoneLabel = zone.label;
+      }
+
+      // Palm trees
+      if (idx % 18 === 0 && idx > 5) {
+        seg.sprite = "palm";
+        seg.spriteX = (idx % 36 === 0 ? 1 : -1) * (1.2 + (idx % 7) * 0.1);
+      }
+
+      segs.push(seg);
+      idx++;
     }
-
-    // gentle hills
-    if (i > 100 && i < 300) y = Math.sin((i - 100) / 200 * Math.PI) * 2000;
-    if (i > 700 && i < 1000) y = Math.sin((i - 700) / 300 * Math.PI) * 3000;
-    if (i > 1500 && i < 1700) y = Math.sin((i - 1500) / 200 * Math.PI) * 1500;
-    if (i > 2200 && i < 2500) y = Math.sin((i - 2200) / 300 * Math.PI) * 2500;
-
-    const seg: Segment = {
-      z: i * SEG_LENGTH,
-      curve, y,
-      px: 0, py: 0, pw: 0, pscale: 0,
-      clip: HEIGHT,
-    };
-
-    // checkpoint gates
-    if (i > 0 && i % CHECKPOINT_INTERVAL === 0) {
-      seg.checkpoint = true;
-    }
-
-    // palms
-    if (i % 20 === 0 && i > 10) {
-      seg.sprite = "palm";
-      seg.spriteX = (Math.random() > 0.5 ? 1 : -1) * (1.2 + Math.random() * 0.8);
-    }
-
-    segs.push(seg);
   }
-  return segs;
+
+  const totalSegs = segs.length;
+
+  // Place 3 checkpoints evenly
+  const cpInterval = Math.floor(totalSegs / 4);
+  for (let c = 1; c <= 3; c++) {
+    const cpIdx = c * cpInterval;
+    if (cpIdx < totalSegs) {
+      segs[cpIdx].checkpoint = true;
+      checkpointIndices.push(cpIdx);
+    }
+  }
+
+  // Finish line: last 10 segments
+  for (let f = Math.max(0, totalSegs - 10); f < totalSegs; f++) {
+    segs[f].finish = true;
+  }
+
+  return { segments: segs, totalSegs, checkpointIndices };
 }
 
 function project(seg: Segment, camX: number, camY: number, camZ: number, screenW: number, screenH: number) {
@@ -170,10 +211,11 @@ const NeonRacerGame = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<GameState>("idle");
   const [score, setScore] = useState(0);
-  const [speed, setSpeed] = useState(0);
-  const [distance, setDistance] = useState(0);
+  const [speedMph, setSpeedMph] = useState(0);
   const [timeLeft, setTimeLeft] = useState(INITIAL_TIME);
+  const [lapProgress, setLapProgress] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [crashReason, setCrashReason] = useState("");
   const [controlScheme, setControlScheme] = useState<ControlScheme>(() => {
     return (localStorage.getItem("arcade-control-scheme") as ControlScheme) || "arrows";
   });
@@ -181,10 +223,12 @@ const NeonRacerGame = () => {
   const stateRef = useRef<GameState>("idle");
   const keysRef = useRef<Set<string>>(new Set());
   const roadRef = useRef<Segment[]>([]);
+  const totalSegsRef = useRef(0);
+  const checkpointIndicesRef = useRef<number[]>([]);
   const posRef = useRef(0);
   const speedRef = useRef(0);
   const playerXRef = useRef(0);
-  const targetXRef = useRef(0);         // lerp target
+  const targetXRef = useRef(0);
   const scoreRef = useRef(0);
   const boostRef = useRef(0);
   const boostCoolRef = useRef(0);
@@ -192,10 +236,11 @@ const NeonRacerGame = () => {
   const animRef = useRef(0);
   const lastTimeRef = useRef(0);
   const timerRef = useRef(INITIAL_TIME);
-  const lastCheckpointRef = useRef(0);
+  const passedCheckpointsRef = useRef<Set<number>>(new Set());
   const floatingTextsRef = useRef<FloatingText[]>([]);
   const controlSchemeRef = useRef(controlScheme);
-  const crashReasonRef = useRef<"crash" | "offroad" | "time">("crash");
+  const shakeRef = useRef(0);
+  const offRoadRef = useRef(false);
 
   const handleSchemeChange = useCallback((scheme: ControlScheme) => {
     setControlScheme(scheme);
@@ -232,7 +277,10 @@ const NeonRacerGame = () => {
   }, []);
 
   const startGame = useCallback(() => {
-    roadRef.current = buildRoad();
+    const { segments, totalSegs, checkpointIndices } = buildCircuit();
+    roadRef.current = segments;
+    totalSegsRef.current = totalSegs;
+    checkpointIndicesRef.current = checkpointIndices;
     posRef.current = 0;
     speedRef.current = 0;
     playerXRef.current = 0;
@@ -241,35 +289,38 @@ const NeonRacerGame = () => {
     boostRef.current = 0;
     boostCoolRef.current = 0;
     timerRef.current = INITIAL_TIME;
-    lastCheckpointRef.current = 0;
+    passedCheckpointsRef.current = new Set();
     floatingTextsRef.current = [];
-    crashReasonRef.current = "crash";
+    shakeRef.current = 0;
+    offRoadRef.current = false;
+
+    // Enemy cars spread across the circuit
     const enemies: EnemyCar[] = [];
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 40; i++) {
       enemies.push({
-        segIdx: 50 + Math.floor(Math.random() * (TOTAL_SEGMENTS - 200)),
+        segIdx: 30 + Math.floor(Math.random() * (totalSegs - 60)),
         offset: -0.6 + Math.random() * 1.2,
-        speed: MAX_SPEED * (0.3 + Math.random() * 0.3),
+        speed: MAX_SPEED * (0.25 + Math.random() * 0.25),
       });
     }
     enemiesRef.current = enemies;
     stateRef.current = "playing";
     setGameState("playing");
     setScore(0);
-    setSpeed(0);
-    setDistance(0);
+    setSpeedMph(0);
     setTimeLeft(INITIAL_TIME);
+    setLapProgress(0);
+    setCrashReason("");
   }, []);
 
-  // input
+  // Input
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
       keysRef.current.add(e.key);
-      if (e.key === " " || e.key === "ArrowUp" || e.key === "ArrowDown" ||
-          e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
         e.preventDefault();
       }
-      if (stateRef.current === "idle" || stateRef.current === "gameover") {
+      if (stateRef.current === "idle" || stateRef.current === "gameover" || stateRef.current === "finished") {
         if (e.key === "Enter" || e.key === " ") startGame();
       }
     };
@@ -282,7 +333,7 @@ const NeonRacerGame = () => {
     };
   }, [startGame]);
 
-  // game loop
+  // Game loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -296,36 +347,44 @@ const NeonRacerGame = () => {
       const H = canvas.height;
       const road = roadRef.current;
       const keys = keysRef.current;
+      const totalSegs = totalSegsRef.current;
+      const totalLength = totalSegs * SEG_LENGTH;
 
       if (stateRef.current === "playing" && road.length > 0) {
         /* ── UPDATE ── */
         let spd = speedRef.current;
         const boosting = boostRef.current > 0;
-        const maxSpd = boosting ? MAX_SPEED * BOOST_MULT : MAX_SPEED;
+        const isOffRoad = Math.abs(playerXRef.current) > 1;
+        offRoadRef.current = isOffRoad;
+        const effectiveMax = isOffRoad ? MAX_SPEED * OFF_ROAD_MAX_MULT : (boosting ? MAX_SPEED * BOOST_MULT : MAX_SPEED);
 
+        // Acceleration / braking / engine braking
         if (isAccel(keys)) spd += ACCEL;
         else if (isBrake(keys)) spd += BRAKE;
-        else spd += DECEL;
+        else spd += DECEL; // engine braking
 
-        if (Math.abs(playerXRef.current) > 1) spd += OFF_ROAD_DECEL;
-        spd = Math.max(0, Math.min(spd, maxSpd));
+        // Off-road: hard cap speed
+        if (isOffRoad && spd > effectiveMax) {
+          spd += -MAX_SPEED / 20; // rapid deceleration
+          shakeRef.current = SHAKE_INTENSITY; // screen shake
+        }
+        spd = Math.max(0, Math.min(spd, effectiveMax));
         speedRef.current = spd;
 
-        // steering with lerp — no lateral input = decelerate target back toward 0
+        // Steering with lerp
         const steerAmt = STEER_SPEED * (spd / MAX_SPEED) * dt * 60;
         const steeringLeft = isLeft(keys);
         const steeringRight = isRight(keys);
         if (steeringLeft) targetXRef.current -= steerAmt;
         if (steeringRight) targetXRef.current += steerAmt;
-        // when no steering input, pull target back toward center
         if (!steeringLeft && !steeringRight) {
-          targetXRef.current *= 0.92; // decay toward 0
+          targetXRef.current *= 0.92;
           if (Math.abs(targetXRef.current) < 0.01) targetXRef.current = 0;
         }
         targetXRef.current = Math.max(-2.5, Math.min(2.5, targetXRef.current));
-        // smooth interpolation
         playerXRef.current += (targetXRef.current - playerXRef.current) * STEER_LERP;
-        // boost
+
+        // Boost
         if (boostCoolRef.current > 0) boostCoolRef.current--;
         if (keys.has(" ") && boostRef.current <= 0 && boostCoolRef.current <= 0 && spd > MAX_SPEED * 0.3) {
           boostRef.current = BOOST_DURATION;
@@ -333,90 +392,107 @@ const NeonRacerGame = () => {
         }
         if (boostRef.current > 0) boostRef.current--;
 
-        // position
+        // Position (NO wrapping — this is a circuit with a finish line)
         posRef.current += spd * dt;
-        const totalLength = TOTAL_SEGMENTS * SEG_LENGTH;
-        if (posRef.current >= totalLength) posRef.current -= totalLength;
 
-        // centrifugal — apply directly to playerX (visual drift), not to target
-        const baseIdx = Math.floor(posRef.current / SEG_LENGTH) % TOTAL_SEGMENTS;
-        const baseSeg = road[baseIdx];
-        if (baseSeg) {
+        // Centrifugal force
+        const baseIdx = Math.min(Math.floor(posRef.current / SEG_LENGTH), totalSegs - 1);
+        if (baseIdx >= 0 && baseIdx < totalSegs) {
+          const baseSeg = road[baseIdx];
           playerXRef.current += baseSeg.curve * CENTRIFUGAL * (spd / MAX_SPEED) * dt * 60;
         }
 
-        // off-road crash: immediate game over if beyond road boundary
-        if (Math.abs(playerXRef.current) > 1.3) {
-          floatingTextsRef.current.push({
-            x: W / 2, y: H * 0.4,
-            text: "OFF ROAD!",
-            life: 50, maxLife: 50,
-          });
-          crashReasonRef.current = "offroad";
+        // Screen shake decay
+        if (shakeRef.current > 0) shakeRef.current *= 0.9;
+        if (shakeRef.current < 0.1) shakeRef.current = 0;
+
+        // Off-road crash: instant game over if way too far
+        if (Math.abs(playerXRef.current) > 1.8) {
+          setCrashReason("OFF ROAD!");
           stateRef.current = "gameover";
           setGameState("gameover");
         }
 
-        // timer countdown
+        // Timer
         timerRef.current -= dt;
         setTimeLeft(Math.max(0, Math.ceil(timerRef.current)));
 
-        // checkpoint detection
-        const currentDistSeg = Math.floor(posRef.current / SEG_LENGTH);
-        const currentCheckpoint = Math.floor(currentDistSeg / CHECKPOINT_INTERVAL);
-        if (currentCheckpoint > lastCheckpointRef.current && currentCheckpoint > 0) {
-          lastCheckpointRef.current = currentCheckpoint;
-          timerRef.current += CHECKPOINT_TIME_ADD;
-          floatingTextsRef.current.push({
-            x: W / 2, y: H * 0.3,
-            text: `TIME +${CHECKPOINT_TIME_ADD}s`,
-            life: 60, maxLife: 60,
-          });
+        // Checkpoint detection
+        for (const cpIdx of checkpointIndicesRef.current) {
+          if (!passedCheckpointsRef.current.has(cpIdx)) {
+            if (baseIdx >= cpIdx) {
+              passedCheckpointsRef.current.add(cpIdx);
+              timerRef.current += CHECKPOINT_TIME_ADD;
+              floatingTextsRef.current.push({
+                x: W / 2, y: H * 0.3,
+                text: `CHECKPOINT +${CHECKPOINT_TIME_ADD}s`,
+                life: 70, maxLife: 70,
+              });
+            }
+          }
         }
 
-        // time up = game over
+        // Finish line detection
+        if (posRef.current >= totalLength) {
+          scoreRef.current = Math.floor(timerRef.current * 100) + Math.floor(posRef.current / SEG_LENGTH);
+          stateRef.current = "finished";
+          setGameState("finished");
+          setScore(Math.floor(scoreRef.current));
+        }
+
+        // Time up
         if (timerRef.current <= 0) {
           timerRef.current = 0;
-          crashReasonRef.current = "time";
+          setCrashReason("TIME'S UP");
           stateRef.current = "gameover";
           setGameState("gameover");
+          scoreRef.current = Math.floor(posRef.current / SEG_LENGTH);
+          setScore(Math.floor(scoreRef.current));
         }
 
-        // score
-        scoreRef.current += spd * dt * 0.01;
+        // Score & HUD state
+        scoreRef.current = Math.floor(posRef.current / SEG_LENGTH);
         setScore(Math.floor(scoreRef.current));
-        setSpeed(Math.floor(spd / MAX_SPEED * 200));
-        setDistance(Math.floor(posRef.current / SEG_LENGTH));
+        setSpeedMph(Math.floor(spd / MAX_SPEED * 220));
+        setLapProgress(Math.min(100, (posRef.current / totalLength) * 100));
 
-        // enemy collision
+        // Enemy collision
         for (const e of enemiesRef.current) {
           const eDist = (e.segIdx * SEG_LENGTH) - posRef.current;
           if (eDist > 0 && eDist < SEG_LENGTH * 2) {
             if (Math.abs(playerXRef.current - e.offset) < 0.4) {
-              crashReasonRef.current = "crash";
+              setCrashReason("WRECKED!");
               stateRef.current = "gameover";
               setGameState("gameover");
               break;
             }
           }
           e.segIdx += e.speed * dt / SEG_LENGTH;
-          if (e.segIdx >= TOTAL_SEGMENTS) e.segIdx -= TOTAL_SEGMENTS;
+          if (e.segIdx >= totalSegs) e.segIdx = totalSegs - 1; // don't wrap
         }
 
-        // update floating texts
+        // Floating texts
         floatingTextsRef.current = floatingTextsRef.current
           .map(ft => ({ ...ft, life: ft.life - 1, y: ft.y - 0.8 }))
           .filter(ft => ft.life > 0);
       }
 
       /* ── RENDER ── */
+      ctx.save();
+      // Screen shake offset
+      if (shakeRef.current > 0) {
+        const sx = (Math.random() - 0.5) * shakeRef.current * 2;
+        const sy = (Math.random() - 0.5) * shakeRef.current * 2;
+        ctx.translate(sx, sy);
+      }
+
       const skyGrad = ctx.createLinearGradient(0, 0, 0, H / 2);
       skyGrad.addColorStop(0, COL_SKY_TOP);
       skyGrad.addColorStop(1, COL_SKY_BOT);
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, W, H);
 
-      // sun
+      // Sun
       const sunY = H * 0.32;
       const sunR = 80;
       const sunGrad = ctx.createRadialGradient(W / 2, sunY, 0, W / 2, sunY, sunR * 2);
@@ -438,7 +514,7 @@ const NeonRacerGame = () => {
         }
       }
 
-      // mountains
+      // Mountains
       ctx.fillStyle = COL_MOUNTAIN;
       ctx.beginPath();
       ctx.moveTo(0, H * 0.45);
@@ -461,19 +537,20 @@ const NeonRacerGame = () => {
       ctx.closePath();
       ctx.fill();
 
-      // road rendering
-      if (roadRef.current.length > 0) {
+      // Road rendering
+      if (road.length > 0) {
         const camZ = posRef.current;
         const startIdx = Math.floor(camZ / SEG_LENGTH);
         let maxy = H;
         let dx = 0;
         let x = 0;
 
-        for (let n = 0; n < DRAW_DISTANCE; n++) {
-          const idx = (startIdx + n) % TOTAL_SEGMENTS;
-          const seg = roadRef.current[idx];
-          const looped = (startIdx + n >= TOTAL_SEGMENTS);
-          const segZ = seg.z + (looped ? TOTAL_SEGMENTS * SEG_LENGTH : 0);
+        const drawDist = Math.min(DRAW_DISTANCE, totalSegs - startIdx);
+
+        for (let n = 0; n < drawDist; n++) {
+          const idx = startIdx + n;
+          if (idx >= totalSegs) break;
+          const seg = road[idx];
 
           project(seg, playerXRef.current * ROAD_WIDTH / 2 - x, CAM_HEIGHT + seg.y, camZ, W, H);
 
@@ -485,32 +562,50 @@ const NeonRacerGame = () => {
           if (seg.py < maxy) maxy = seg.py;
         }
 
-        for (let n = DRAW_DISTANCE - 1; n > 0; n--) {
-          const idx = (startIdx + n) % TOTAL_SEGMENTS;
-          const seg = roadRef.current[idx];
-          const prevIdx = (startIdx + n - 1) % TOTAL_SEGMENTS;
-          const prev = roadRef.current[prevIdx];
+        for (let n = drawDist - 1; n > 0; n--) {
+          const idx = startIdx + n;
+          if (idx >= totalSegs) continue;
+          const seg = road[idx];
+          const prevIdx = startIdx + n - 1;
+          if (prevIdx < 0 || prevIdx >= totalSegs) continue;
+          const prev = road[prevIdx];
 
           if (seg.pscale <= 0 || prev.pscale <= 0) continue;
 
-          const isOdd = (Math.floor((startIdx + n) / 3) % 2) === 0;
+          const isOdd = (Math.floor(idx / 3) % 2) === 0;
 
-          // grass
+          // Grass
           ctx.fillStyle = isOdd ? COL_GRASS_DARK : COL_GRASS_LIGHT;
           ctx.fillRect(0, prev.py, W, seg.py - prev.py);
 
-          // rumble
-          drawPoly(ctx, isOdd ? COL_RUMBLE_DARK : COL_RUMBLE_LIGHT,
-            prev.px, prev.py, prev.pw * 1.15,
-            seg.px, seg.py, seg.pw * 1.15);
+          // Finish line checkered pattern
+          if (seg.finish) {
+            const checkerSize = prev.pw / 6;
+            for (let ci = -3; ci <= 3; ci++) {
+              const cx1 = prev.px + ci * checkerSize * 2;
+              const cx2 = seg.px + ci * checkerSize * 2;
+              drawPoly(ctx, isOdd ? COL_FINISH_A : COL_FINISH_B,
+                cx1, prev.py, checkerSize * 0.5,
+                cx2, seg.py, checkerSize * 0.5);
+            }
+            // Rumble still visible
+            drawPoly(ctx, isOdd ? COL_RUMBLE_DARK : COL_RUMBLE_LIGHT,
+              prev.px, prev.py, prev.pw * 1.15,
+              seg.px, seg.py, seg.pw * 1.15);
+          } else {
+            // Rumble
+            drawPoly(ctx, isOdd ? COL_RUMBLE_DARK : COL_RUMBLE_LIGHT,
+              prev.px, prev.py, prev.pw * 1.15,
+              seg.px, seg.py, seg.pw * 1.15);
 
-          // road
-          drawPoly(ctx, isOdd ? COL_ROAD_DARK : COL_ROAD_LIGHT,
-            prev.px, prev.py, prev.pw,
-            seg.px, seg.py, seg.pw);
+            // Road
+            drawPoly(ctx, isOdd ? COL_ROAD_DARK : COL_ROAD_LIGHT,
+              prev.px, prev.py, prev.pw,
+              seg.px, seg.py, seg.pw);
+          }
 
-          // lanes
-          if (isOdd) {
+          // Lanes
+          if (isOdd && !seg.finish) {
             const laneW1 = prev.pw / 20;
             const laneW2 = seg.pw / 20;
             for (let l = 1; l < LANE_COUNT; l++) {
@@ -520,7 +615,7 @@ const NeonRacerGame = () => {
             }
           }
 
-          // grid lines
+          // Grid lines
           if (isOdd && n < 80) {
             ctx.strokeStyle = "#00FFFF15";
             ctx.lineWidth = 1;
@@ -530,28 +625,31 @@ const NeonRacerGame = () => {
             ctx.stroke();
           }
 
-          // checkpoint gate
+          // Checkpoint gate
           if (seg.checkpoint && seg.pscale > 0 && n < 100) {
             const gateW = seg.pw * 1.3;
             const gateH = seg.pscale * 4000;
             const gx = seg.px;
             const gy = seg.py;
-            // pillars
             ctx.fillStyle = "#00FFFF80";
             ctx.fillRect(gx - gateW - 4, gy - gateH, 8, gateH);
             ctx.fillRect(gx + gateW - 4, gy - gateH, 8, gateH);
-            // top bar
             ctx.fillStyle = "#FF007F90";
             ctx.fillRect(gx - gateW, gy - gateH, gateW * 2, 6);
-            // glow
             ctx.shadowColor = "#00FFFF";
             ctx.shadowBlur = 15;
             ctx.fillStyle = "#00FFFF40";
             ctx.fillRect(gx - gateW, gy - gateH - 2, gateW * 2, 3);
             ctx.shadowBlur = 0;
+            // Label
+            ctx.font = "bold 8px 'Press Start 2P', monospace";
+            ctx.fillStyle = "#00FFFF";
+            ctx.textAlign = "center";
+            ctx.fillText("NEON GATE", gx, gy - gateH - 8);
+            ctx.textAlign = "left";
           }
 
-          // palms
+          // Palms
           if (seg.sprite === "palm" && seg.pscale > 0) {
             const spriteScale = seg.pscale * 3000;
             const sx = seg.px + (seg.spriteX || 0) * seg.pw;
@@ -570,9 +668,9 @@ const NeonRacerGame = () => {
             ctx.fill();
           }
 
-          // enemy cars
+          // Enemy cars
           for (const e of enemiesRef.current) {
-            const eIdx = Math.floor(e.segIdx) % TOTAL_SEGMENTS;
+            const eIdx = Math.floor(e.segIdx);
             if (eIdx === idx && seg.pscale > 0) {
               const carScale = seg.pscale * 2000;
               const cx = seg.px + e.offset * seg.pw;
@@ -591,7 +689,13 @@ const NeonRacerGame = () => {
         }
       }
 
-      // speed blur effect at edges
+      // Off-road red tint
+      if (offRoadRef.current && stateRef.current === "playing") {
+        ctx.fillStyle = "rgba(255, 0, 50, 0.08)";
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // Speed blur effect at edges
       if (stateRef.current === "playing") {
         const spdRatio = speedRef.current / MAX_SPEED;
         if (spdRatio > 0.7) {
@@ -609,12 +713,19 @@ const NeonRacerGame = () => {
         }
       }
 
-      // player car
-      if (stateRef.current === "playing" || stateRef.current === "gameover") {
+      // Player car
+      if (stateRef.current === "playing" || stateRef.current === "gameover" || stateRef.current === "finished") {
         const carW = 50;
         const carH = 30;
         const carX = W / 2;
         const carY = H - 60;
+
+        // Car rotation based on steering
+        const steerAngle = (targetXRef.current / 2.5) * 0.15;
+        ctx.save();
+        ctx.translate(carX, carY + carH / 2);
+        ctx.rotate(steerAngle);
+        ctx.translate(-carX, -(carY + carH / 2));
 
         ctx.fillStyle = "#00000060";
         ctx.fillRect(carX - carW / 2 - 3, carY - 3, carW + 6, carH + 6);
@@ -637,17 +748,24 @@ const NeonRacerGame = () => {
           ctx.fillStyle = "#FF007F90";
           ctx.fillRect(carX - 8, carY + carH, 6, 10 + Math.random() * 10);
           ctx.fillRect(carX + 2, carY + carH, 6, 10 + Math.random() * 10);
-          ctx.fillStyle = `rgba(255, 0, 127, ${0.05 + Math.random() * 0.05})`;
+        }
+
+        ctx.restore();
+
+        // Boost screen flash
+        if (boostRef.current > 0) {
+          ctx.fillStyle = `rgba(255, 0, 127, ${0.03 + Math.random() * 0.03})`;
           ctx.fillRect(0, 0, W, H);
         }
       }
 
-      // HUD
+      // Canvas HUD
       if (stateRef.current === "playing") {
-        ctx.fillStyle = "rgba(10, 0, 30, 0.6)";
+        // Speed + Time panel
+        ctx.fillStyle = "rgba(10, 0, 30, 0.7)";
         ctx.strokeStyle = "#00FFFF40";
         ctx.lineWidth = 1;
-        const hudX = 10, hudY = 10, hudW = 150, hudH = 90;
+        const hudX = 10, hudY = 10, hudW = 160, hudH = 70;
         ctx.beginPath();
         ctx.roundRect(hudX, hudY, hudW, hudH, 8);
         ctx.fill();
@@ -655,21 +773,19 @@ const NeonRacerGame = () => {
 
         ctx.font = "bold 10px 'Press Start 2P', monospace";
         ctx.fillStyle = "#00FFFF";
-        ctx.fillText(`${Math.floor(speedRef.current / MAX_SPEED * 200)} MPH`, hudX + 10, hudY + 22);
-        ctx.fillStyle = "#FF007F";
-        ctx.fillText(`SCORE ${Math.floor(scoreRef.current)}`, hudX + 10, hudY + 42);
-        ctx.fillStyle = "#FFFFFF80";
-        ctx.font = "8px 'Press Start 2P', monospace";
-        ctx.fillText(`DIST ${Math.floor(posRef.current / SEG_LENGTH)}m`, hudX + 10, hudY + 58);
+        ctx.fillText(`${Math.floor(speedRef.current / MAX_SPEED * 220)} MPH`, hudX + 10, hudY + 22);
 
-        // timer
         const tColor = timerRef.current < 10 ? "#FF007F" : "#FFFF00";
         ctx.fillStyle = tColor;
-        ctx.font = "bold 10px 'Press Start 2P', monospace";
-        ctx.fillText(`TIME ${Math.ceil(timerRef.current)}s`, hudX + 10, hudY + 78);
+        ctx.fillText(`TIME ${Math.ceil(timerRef.current)}s`, hudX + 10, hudY + 42);
 
-        // boost indicator
-        if (boostCoolRef.current <= 0) {
+        ctx.fillStyle = "#FFFFFF60";
+        ctx.font = "7px 'Press Start 2P', monospace";
+        const prog = Math.min(100, (posRef.current / (totalSegsRef.current * SEG_LENGTH)) * 100);
+        ctx.fillText(`LAP ${Math.floor(prog)}%`, hudX + 10, hudY + 58);
+
+        // Boost indicator
+        if (boostCoolRef.current <= 0 && speedRef.current > MAX_SPEED * 0.3) {
           ctx.fillStyle = "#FFFF00";
           ctx.font = "7px 'Press Start 2P', monospace";
           ctx.fillText("BOOST READY", W - 120, 25);
@@ -678,9 +794,18 @@ const NeonRacerGame = () => {
           ctx.font = "7px 'Press Start 2P', monospace";
           ctx.fillText("BOOST!", W - 80, 25);
         }
+
+        // Off-road warning
+        if (offRoadRef.current) {
+          ctx.fillStyle = "#FF007F";
+          ctx.font = "bold 10px 'Press Start 2P', monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("⚠ OFF ROAD ⚠", W / 2, 30);
+          ctx.textAlign = "left";
+        }
       }
 
-      // floating texts
+      // Floating texts
       for (const ft of floatingTextsRef.current) {
         const alpha = ft.life / ft.maxLife;
         ctx.globalAlpha = alpha;
@@ -695,6 +820,7 @@ const NeonRacerGame = () => {
         ctx.textAlign = "left";
       }
 
+      ctx.restore();
       animRef.current = requestAnimationFrame(loop);
     };
 
@@ -703,17 +829,24 @@ const NeonRacerGame = () => {
   }, [isLeft, isRight, isAccel, isBrake]);
 
   const schemes: ControlScheme[] = ["arrows", "qwerty", "azerty"];
+  const isEndState = gameState === "gameover" || gameState === "finished";
 
   return (
     <div className="flex flex-col items-center gap-4 w-full max-w-[680px] mx-auto px-4">
-      {/* Score Bar + Settings */}
+      {/* HUD Bar */}
       <div className="flex items-center justify-between w-full max-w-[640px]">
         <div className="glass rounded-lg px-4 py-2">
-          <span className="text-[10px] text-muted-foreground block">SCORE</span>
-          <span className="font-pixel text-sm text-primary neon-text-cyan">{score}</span>
+          <span className="text-[10px] text-muted-foreground block">SPEED</span>
+          <span className="font-pixel text-sm text-primary neon-text-cyan">{speedMph} MPH</span>
         </div>
 
-        {/* Settings Gear + Modal */}
+        {/* Lap Progress */}
+        <div className="flex-1 mx-4">
+          <span className="text-[9px] text-muted-foreground font-pixel block text-center mb-1">LAP PROGRESS</span>
+          <Progress value={lapProgress} className="h-2 bg-muted/30" />
+        </div>
+
+        {/* Settings */}
         <div className="relative">
           <button
             onClick={() => setSettingsOpen(o => !o)}
@@ -768,7 +901,8 @@ const NeonRacerGame = () => {
         {/* Idle overlay */}
         {gameState === "idle" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center glass rounded-lg">
-            <h2 className="font-pixel text-sm text-secondary neon-text-pink mb-4">NEON RACER</h2>
+            <h2 className="font-pixel text-sm text-secondary neon-text-pink mb-2">NEON RACER</h2>
+            <p className="font-pixel text-[8px] text-primary neon-text-cyan mb-4">CIRCUIT MODE</p>
             <p className="text-muted-foreground text-sm mb-6 text-center px-4">
               {SCHEME_HINT[controlScheme]}
             </p>
@@ -782,12 +916,14 @@ const NeonRacerGame = () => {
         )}
 
         {/* Game over overlay */}
-        {gameState === "gameover" && (
+        {isEndState && (
           <div className="absolute inset-0 flex flex-col items-center justify-center glass rounded-lg overflow-y-auto py-4">
             <h2 className="font-pixel text-sm text-secondary neon-text-pink mb-2">
-              {crashReasonRef.current === "time" ? "TIME'S UP" : crashReasonRef.current === "offroad" ? "OFF ROAD!" : "WRECKED"}
+              {gameState === "finished" ? "CIRCUIT COMPLETE!" : crashReason || "GAME OVER"}
             </h2>
-            <p className="font-pixel text-xs text-primary neon-text-cyan mb-1">{distance}m</p>
+            {gameState === "finished" && (
+              <p className="font-pixel text-[8px] text-neon-yellow mb-1">TIME BONUS: {Math.floor(timerRef.current * 100)}</p>
+            )}
             <p className="font-pixel text-xs text-primary neon-text-cyan mb-3">{score} PTS</p>
             <GameOverLeaderboard gameId="racer" score={score} />
             <button
