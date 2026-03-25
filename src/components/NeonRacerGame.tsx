@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 
 type ControlScheme = "arrows" | "qwerty" | "azerty";
 type GameState = "idle" | "playing" | "gameover" | "finished";
+type DriftState = "none" | "charging" | "drifting";
 
 const CONTROL_LABELS: Record<ControlScheme, string> = {
   arrows: "Arrows",
@@ -14,9 +15,9 @@ const CONTROL_LABELS: Record<ControlScheme, string> = {
 };
 
 const SCHEME_HINT: Record<ControlScheme, string> = {
-  arrows: "← → steer · ↑ accel · ↓ brake · Space boost",
-  qwerty: "A/D steer · W accel · S brake · Space boost",
-  azerty: "Q/D steer · Z accel · S brake · Space boost",
+  arrows: "← → steer · ↑ accel · ↓ brake · Space drift",
+  qwerty: "A/D steer · W accel · S brake · Space drift",
+  azerty: "Q/D steer · Z accel · S brake · Space drift",
 };
 
 const WIDTH = 640;
@@ -35,17 +36,22 @@ const CAM_DEPTH = 1 / Math.tan((FOV / 2) * (Math.PI / 180));
 const MAX_SPEED = SEG_LENGTH * 60;
 const ACCEL = MAX_SPEED / 100;
 const BRAKE = -MAX_SPEED / 50;
-const DECEL = -MAX_SPEED / 300;          // engine braking (gentle)
-const OFF_ROAD_MAX_MULT = 0.3;           // 70% speed reduction off-road
+const DECEL = -MAX_SPEED / 300;
+const OFF_ROAD_MAX_MULT = 0.3;
 const STEER_SPEED = 3 * 0.6;
 const CENTRIFUGAL = 0.35;
-const BOOST_MULT = 1.8;
-const BOOST_DURATION = 90;
-const BOOST_COOLDOWN = 180;
 const STEER_LERP = 0.12;
 
-const INITIAL_TIME = 45;
+/* ── drift constants ── */
+const DRIFT_ENTRY_TIME = 0.5;       // seconds holding turn before drift starts
+const DRIFT_SPEED_PENALTY = 0.92;   // speed multiplier while drifting
+const DRIFT_LATERAL_BOOST = 1.8;    // extra lateral push outward
+const DRIFT_MINI_BOOST_MULT = 1.6;
+const DRIFT_MINI_BOOST_DURATION = 60; // frames
+
+const INITIAL_TIME = 50;
 const CHECKPOINT_TIME_ADD = 15;
+const TOTAL_LAPS = 3;
 
 /* ── screen shake ── */
 const SHAKE_INTENSITY = 4;
@@ -75,7 +81,6 @@ interface TrackZone {
   label?: string;
 }
 
-// The fixed circuit
 const TRACK_LAYOUT: TrackZone[] = [
   { length: 200, curve: 0, label: "START STRAIGHT" },
   { length: 120, curve: 2.5, label: "EASY LEFT" },
@@ -101,19 +106,14 @@ interface Segment {
   z: number;
   curve: number;
   y: number;
+  // projected values - recomputed each frame
   px: number; py: number; pw: number; pscale: number;
   clip: number;
-  sprite?: "palm" | "car";
+  sprite?: "palm";
   spriteX?: number;
   checkpoint?: boolean;
   finish?: boolean;
   zoneLabel?: string;
-}
-
-interface EnemyCar {
-  segIdx: number;
-  offset: number;
-  speed: number;
 }
 
 interface FloatingText {
@@ -123,16 +123,15 @@ interface FloatingText {
   maxLife: number;
 }
 
-function buildCircuit(): { segments: Segment[]; totalSegs: number; checkpointIndices: number[] } {
+function buildCircuit(): { segments: Segment[]; lapLength: number; checkpointIndices: number[] } {
   const segs: Segment[] = [];
   const checkpointIndices: number[] = [];
-  const RAMP = 40; // transition ramp length
+  const RAMP = 40;
 
   let idx = 0;
   for (const zone of TRACK_LAYOUT) {
     for (let i = 0; i < zone.length; i++) {
       let curve = zone.curve;
-      // Smooth ramp in/out
       if (i < RAMP) curve *= i / RAMP;
       else if (zone.length - i < RAMP) curve *= (zone.length - i) / RAMP;
 
@@ -149,12 +148,8 @@ function buildCircuit(): { segments: Segment[]; totalSegs: number; checkpointInd
         clip: HEIGHT,
       };
 
-      // Label first segment of zone
-      if (i === 0 && zone.label) {
-        seg.zoneLabel = zone.label;
-      }
+      if (i === 0 && zone.label) seg.zoneLabel = zone.label;
 
-      // Palm trees
       if (idx % 18 === 0 && idx > 5) {
         seg.sprite = "palm";
         seg.spriteX = (idx % 36 === 0 ? 1 : -1) * (1.2 + (idx % 7) * 0.1);
@@ -165,33 +160,33 @@ function buildCircuit(): { segments: Segment[]; totalSegs: number; checkpointInd
     }
   }
 
-  const totalSegs = segs.length;
+  const lapLength = segs.length;
 
-  // Place 3 checkpoints evenly
-  const cpInterval = Math.floor(totalSegs / 4);
+  // 3 checkpoints per lap
+  const cpInterval = Math.floor(lapLength / 4);
   for (let c = 1; c <= 3; c++) {
     const cpIdx = c * cpInterval;
-    if (cpIdx < totalSegs) {
+    if (cpIdx < lapLength) {
       segs[cpIdx].checkpoint = true;
       checkpointIndices.push(cpIdx);
     }
   }
 
   // Finish line: last 10 segments
-  for (let f = Math.max(0, totalSegs - 10); f < totalSegs; f++) {
+  for (let f = Math.max(0, lapLength - 10); f < lapLength; f++) {
     segs[f].finish = true;
   }
 
-  return { segments: segs, totalSegs, checkpointIndices };
+  return { segments: segs, lapLength, checkpointIndices };
 }
 
-function project(seg: Segment, camX: number, camY: number, camZ: number, screenW: number, screenH: number) {
+function projectSeg(seg: Segment, camX: number, camY: number, camZ: number, W: number, H: number) {
   const dz = seg.z - camZ;
   if (dz <= 0) { seg.pscale = 0; return; }
   seg.pscale = CAM_DEPTH / dz;
-  seg.px = screenW / 2 + (seg.pscale * (0 - camX) * screenW / 2);
-  seg.py = screenH / 2 - (seg.pscale * (seg.y - camY) * screenH / 2);
-  seg.pw = seg.pscale * ROAD_WIDTH * screenW / 2;
+  seg.px = Math.round(W / 2 + (seg.pscale * (0 - camX) * W / 2));
+  seg.py = Math.round(H / 2 - (seg.pscale * (seg.y - camY) * H / 2));
+  seg.pw = Math.round(seg.pscale * ROAD_WIDTH * W / 2);
 }
 
 function drawPoly(ctx: CanvasRenderingContext2D, color: string,
@@ -199,10 +194,10 @@ function drawPoly(ctx: CanvasRenderingContext2D, color: string,
   x2: number, y2: number, w2: number) {
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(x1 - w1, y1);
-  ctx.lineTo(x1 + w1, y1);
-  ctx.lineTo(x2 + w2, y2);
-  ctx.lineTo(x2 - w2, y2);
+  ctx.moveTo(Math.round(x1 - w1), y1);
+  ctx.lineTo(Math.round(x1 + w1), y1);
+  ctx.lineTo(Math.round(x2 + w2), y2);
+  ctx.lineTo(Math.round(x2 - w2), y2);
   ctx.closePath();
   ctx.fill();
 }
@@ -216,6 +211,9 @@ const NeonRacerGame = () => {
   const [lapProgress, setLapProgress] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [crashReason, setCrashReason] = useState("");
+  const [currentLap, setCurrentLap] = useState(1);
+  const [bestLapTime, setBestLapTime] = useState<number | null>(null);
+  const [driftDisplay, setDriftDisplay] = useState<DriftState>("none");
   const [controlScheme, setControlScheme] = useState<ControlScheme>(() => {
     return (localStorage.getItem("arcade-control-scheme") as ControlScheme) || "arrows";
   });
@@ -223,24 +221,32 @@ const NeonRacerGame = () => {
   const stateRef = useRef<GameState>("idle");
   const keysRef = useRef<Set<string>>(new Set());
   const roadRef = useRef<Segment[]>([]);
-  const totalSegsRef = useRef(0);
+  const lapLengthRef = useRef(0);
   const checkpointIndicesRef = useRef<number[]>([]);
   const posRef = useRef(0);
   const speedRef = useRef(0);
   const playerXRef = useRef(0);
   const targetXRef = useRef(0);
   const scoreRef = useRef(0);
-  const boostRef = useRef(0);
-  const boostCoolRef = useRef(0);
-  const enemiesRef = useRef<EnemyCar[]>([]);
   const animRef = useRef(0);
   const lastTimeRef = useRef(0);
   const timerRef = useRef(INITIAL_TIME);
-  const passedCheckpointsRef = useRef<Set<number>>(new Set());
+  const passedCheckpointsRef = useRef<Set<string>>(new Set());
   const floatingTextsRef = useRef<FloatingText[]>([]);
   const controlSchemeRef = useRef(controlScheme);
   const shakeRef = useRef(0);
   const offRoadRef = useRef(false);
+
+  // Lap tracking
+  const currentLapRef = useRef(1);
+  const lapStartTimeRef = useRef(0);
+  const bestLapTimeRef = useRef<number | null>(null);
+
+  // Drift state
+  const driftStateRef = useRef<DriftState>("none");
+  const steerHoldTimeRef = useRef(0);
+  const driftDirRef = useRef(0); // -1 left, 1 right
+  const miniBoostRef = useRef(0);
 
   const handleSchemeChange = useCallback((scheme: ControlScheme) => {
     setControlScheme(scheme);
@@ -276,34 +282,33 @@ const NeonRacerGame = () => {
     return keys.has("s") || keys.has("S");
   }, []);
 
+  const isHandbrake = useCallback((keys: Set<string>) => {
+    return keys.has(" ");
+  }, []);
+
   const startGame = useCallback(() => {
-    const { segments, totalSegs, checkpointIndices } = buildCircuit();
+    const { segments, lapLength, checkpointIndices } = buildCircuit();
     roadRef.current = segments;
-    totalSegsRef.current = totalSegs;
+    lapLengthRef.current = lapLength;
     checkpointIndicesRef.current = checkpointIndices;
     posRef.current = 0;
     speedRef.current = 0;
     playerXRef.current = 0;
     targetXRef.current = 0;
     scoreRef.current = 0;
-    boostRef.current = 0;
-    boostCoolRef.current = 0;
     timerRef.current = INITIAL_TIME;
     passedCheckpointsRef.current = new Set();
     floatingTextsRef.current = [];
     shakeRef.current = 0;
     offRoadRef.current = false;
+    currentLapRef.current = 1;
+    lapStartTimeRef.current = 0;
+    bestLapTimeRef.current = null;
+    driftStateRef.current = "none";
+    steerHoldTimeRef.current = 0;
+    driftDirRef.current = 0;
+    miniBoostRef.current = 0;
 
-    // Enemy cars spread across the circuit
-    const enemies: EnemyCar[] = [];
-    for (let i = 0; i < 40; i++) {
-      enemies.push({
-        segIdx: 30 + Math.floor(Math.random() * (totalSegs - 60)),
-        offset: -0.6 + Math.random() * 1.2,
-        speed: MAX_SPEED * (0.25 + Math.random() * 0.25),
-      });
-    }
-    enemiesRef.current = enemies;
     stateRef.current = "playing";
     setGameState("playing");
     setScore(0);
@@ -311,6 +316,9 @@ const NeonRacerGame = () => {
     setTimeLeft(INITIAL_TIME);
     setLapProgress(0);
     setCrashReason("");
+    setCurrentLap(1);
+    setBestLapTime(null);
+    setDriftDisplay("none");
   }, []);
 
   // Input
@@ -347,26 +355,31 @@ const NeonRacerGame = () => {
       const H = canvas.height;
       const road = roadRef.current;
       const keys = keysRef.current;
-      const totalSegs = totalSegsRef.current;
-      const totalLength = totalSegs * SEG_LENGTH;
+      const lapLength = lapLengthRef.current;
+      const lapWorldLength = lapLength * SEG_LENGTH;
 
       if (stateRef.current === "playing" && road.length > 0) {
         /* ── UPDATE ── */
         let spd = speedRef.current;
-        const boosting = boostRef.current > 0;
+        const isMiniBoost = miniBoostRef.current > 0;
         const isOffRoad = Math.abs(playerXRef.current) > 1;
         offRoadRef.current = isOffRoad;
-        const effectiveMax = isOffRoad ? MAX_SPEED * OFF_ROAD_MAX_MULT : (boosting ? MAX_SPEED * BOOST_MULT : MAX_SPEED);
+        const isDrifting = driftStateRef.current === "drifting";
+        
+        let effectiveMax = MAX_SPEED;
+        if (isOffRoad) effectiveMax = MAX_SPEED * OFF_ROAD_MAX_MULT;
+        else if (isMiniBoost) effectiveMax = MAX_SPEED * DRIFT_MINI_BOOST_MULT;
+        else if (isDrifting) effectiveMax = MAX_SPEED * DRIFT_SPEED_PENALTY;
 
         // Acceleration / braking / engine braking
         if (isAccel(keys)) spd += ACCEL;
         else if (isBrake(keys)) spd += BRAKE;
-        else spd += DECEL; // engine braking
+        else spd += DECEL;
 
         // Off-road: hard cap speed
         if (isOffRoad && spd > effectiveMax) {
-          spd += -MAX_SPEED / 20; // rapid deceleration
-          shakeRef.current = SHAKE_INTENSITY; // screen shake
+          spd += -MAX_SPEED / 20;
+          shakeRef.current = SHAKE_INTENSITY;
         }
         spd = Math.max(0, Math.min(spd, effectiveMax));
         speedRef.current = spd;
@@ -375,29 +388,84 @@ const NeonRacerGame = () => {
         const steerAmt = STEER_SPEED * (spd / MAX_SPEED) * dt * 60;
         const steeringLeft = isLeft(keys);
         const steeringRight = isRight(keys);
+        const steering = steeringLeft || steeringRight;
+        const steerDir = steeringLeft ? -1 : steeringRight ? 1 : 0;
+
         if (steeringLeft) targetXRef.current -= steerAmt;
         if (steeringRight) targetXRef.current += steerAmt;
-        if (!steeringLeft && !steeringRight) {
+        if (!steering) {
           targetXRef.current *= 0.92;
           if (Math.abs(targetXRef.current) < 0.01) targetXRef.current = 0;
         }
         targetXRef.current = Math.max(-2.5, Math.min(2.5, targetXRef.current));
         playerXRef.current += (targetXRef.current - playerXRef.current) * STEER_LERP;
 
-        // Boost
-        if (boostCoolRef.current > 0) boostCoolRef.current--;
-        if (keys.has(" ") && boostRef.current <= 0 && boostCoolRef.current <= 0 && spd > MAX_SPEED * 0.3) {
-          boostRef.current = BOOST_DURATION;
-          boostCoolRef.current = BOOST_COOLDOWN;
+        /* ── DRIFT SYSTEM ── */
+        if (steering && spd > MAX_SPEED * 0.4) {
+          steerHoldTimeRef.current += dt;
+        } else {
+          steerHoldTimeRef.current = 0;
         }
-        if (boostRef.current > 0) boostRef.current--;
 
-        // Position (NO wrapping — this is a circuit with a finish line)
+        const handbrake = isHandbrake(keys);
+        const prevDrift = driftStateRef.current;
+
+        if (driftStateRef.current === "none") {
+          // Enter drift: holding turn long enough OR handbrake + turning
+          if (steering && spd > MAX_SPEED * 0.4 &&
+              (steerHoldTimeRef.current > DRIFT_ENTRY_TIME || handbrake)) {
+            driftStateRef.current = "charging";
+            driftDirRef.current = steerDir;
+          }
+        }
+
+        if (driftStateRef.current === "charging") {
+          if (!steering || spd < MAX_SPEED * 0.2) {
+            // Release drift → mini-boost!
+            driftStateRef.current = "none";
+            miniBoostRef.current = DRIFT_MINI_BOOST_DURATION;
+            floatingTextsRef.current.push({
+              x: W / 2, y: H * 0.4,
+              text: "MINI BOOST!",
+              life: 40, maxLife: 40,
+            });
+          } else {
+            // Drift is active: push outward (centrifugal-like)
+            playerXRef.current += driftDirRef.current * DRIFT_LATERAL_BOOST * (spd / MAX_SPEED) * dt;
+            driftStateRef.current = "drifting";
+          }
+        }
+
+        if (driftStateRef.current === "drifting") {
+          if (!steering || spd < MAX_SPEED * 0.2) {
+            // Release drift → mini-boost!
+            driftStateRef.current = "none";
+            miniBoostRef.current = DRIFT_MINI_BOOST_DURATION;
+            steerHoldTimeRef.current = 0;
+            floatingTextsRef.current.push({
+              x: W / 2, y: H * 0.4,
+              text: "MINI BOOST!",
+              life: 40, maxLife: 40,
+            });
+          } else {
+            // Continue drifting outward
+            playerXRef.current += driftDirRef.current * DRIFT_LATERAL_BOOST * (spd / MAX_SPEED) * dt;
+          }
+        }
+
+        if (prevDrift !== driftStateRef.current) {
+          setDriftDisplay(driftStateRef.current);
+        }
+
+        if (miniBoostRef.current > 0) miniBoostRef.current--;
+
+        // Position (wraps per lap)
         posRef.current += spd * dt;
 
-        // Centrifugal force
-        const baseIdx = Math.min(Math.floor(posRef.current / SEG_LENGTH), totalSegs - 1);
-        if (baseIdx >= 0 && baseIdx < totalSegs) {
+        // Centrifugal force from road curve
+        const worldPos = posRef.current % lapWorldLength;
+        const baseIdx = Math.min(Math.floor(worldPos / SEG_LENGTH), lapLength - 1);
+        if (baseIdx >= 0 && baseIdx < lapLength) {
           const baseSeg = road[baseIdx];
           playerXRef.current += baseSeg.curve * CENTRIFUGAL * (spd / MAX_SPEED) * dt * 60;
         }
@@ -406,22 +474,26 @@ const NeonRacerGame = () => {
         if (shakeRef.current > 0) shakeRef.current *= 0.9;
         if (shakeRef.current < 0.1) shakeRef.current = 0;
 
-        // Off-road crash: instant game over if way too far
+        // Off-road crash
         if (Math.abs(playerXRef.current) > 1.8) {
           setCrashReason("OFF ROAD!");
           stateRef.current = "gameover";
           setGameState("gameover");
+          scoreRef.current = Math.floor(posRef.current / SEG_LENGTH);
+          setScore(scoreRef.current);
         }
 
         // Timer
         timerRef.current -= dt;
         setTimeLeft(Math.max(0, Math.ceil(timerRef.current)));
 
-        // Checkpoint detection
+        // Checkpoint detection (per lap)
+        const lap = currentLapRef.current;
         for (const cpIdx of checkpointIndicesRef.current) {
-          if (!passedCheckpointsRef.current.has(cpIdx)) {
+          const key = `${lap}-${cpIdx}`;
+          if (!passedCheckpointsRef.current.has(key)) {
             if (baseIdx >= cpIdx) {
-              passedCheckpointsRef.current.add(cpIdx);
+              passedCheckpointsRef.current.add(key);
               timerRef.current += CHECKPOINT_TIME_ADD;
               floatingTextsRef.current.push({
                 x: W / 2, y: H * 0.3,
@@ -432,12 +504,35 @@ const NeonRacerGame = () => {
           }
         }
 
-        // Finish line detection
-        if (posRef.current >= totalLength) {
-          scoreRef.current = Math.floor(timerRef.current * 100) + Math.floor(posRef.current / SEG_LENGTH);
-          stateRef.current = "finished";
-          setGameState("finished");
-          setScore(Math.floor(scoreRef.current));
+        // Lap completion
+        const totalLapPos = posRef.current / lapWorldLength;
+        const completedLaps = Math.floor(totalLapPos);
+        if (completedLaps >= currentLapRef.current) {
+          // Record lap time
+          const elapsed = INITIAL_TIME - timerRef.current + 
+            (currentLapRef.current - 1) * 0; // approximate
+          const lapTime = time / 1000 - lapStartTimeRef.current;
+          if (bestLapTimeRef.current === null || lapTime < bestLapTimeRef.current) {
+            bestLapTimeRef.current = lapTime;
+            setBestLapTime(lapTime);
+          }
+          lapStartTimeRef.current = time / 1000;
+
+          if (completedLaps >= TOTAL_LAPS) {
+            // FINISHED ALL LAPS
+            scoreRef.current = Math.floor(timerRef.current * 100) + Math.floor(posRef.current / SEG_LENGTH);
+            stateRef.current = "finished";
+            setGameState("finished");
+            setScore(scoreRef.current);
+          } else {
+            currentLapRef.current = completedLaps + 1;
+            setCurrentLap(currentLapRef.current);
+            floatingTextsRef.current.push({
+              x: W / 2, y: H * 0.25,
+              text: `LAP ${currentLapRef.current}/${TOTAL_LAPS}`,
+              life: 80, maxLife: 80,
+            });
+          }
         }
 
         // Time up
@@ -447,29 +542,15 @@ const NeonRacerGame = () => {
           stateRef.current = "gameover";
           setGameState("gameover");
           scoreRef.current = Math.floor(posRef.current / SEG_LENGTH);
-          setScore(Math.floor(scoreRef.current));
+          setScore(scoreRef.current);
         }
 
         // Score & HUD state
         scoreRef.current = Math.floor(posRef.current / SEG_LENGTH);
-        setScore(Math.floor(scoreRef.current));
+        setScore(scoreRef.current);
         setSpeedMph(Math.floor(spd / MAX_SPEED * 220));
-        setLapProgress(Math.min(100, (posRef.current / totalLength) * 100));
-
-        // Enemy collision
-        for (const e of enemiesRef.current) {
-          const eDist = (e.segIdx * SEG_LENGTH) - posRef.current;
-          if (eDist > 0 && eDist < SEG_LENGTH * 2) {
-            if (Math.abs(playerXRef.current - e.offset) < 0.4) {
-              setCrashReason("WRECKED!");
-              stateRef.current = "gameover";
-              setGameState("gameover");
-              break;
-            }
-          }
-          e.segIdx += e.speed * dt / SEG_LENGTH;
-          if (e.segIdx >= totalSegs) e.segIdx = totalSegs - 1; // don't wrap
-        }
+        const lapProg = ((posRef.current % lapWorldLength) / lapWorldLength) * 100;
+        setLapProgress(Math.min(100, lapProg));
 
         // Floating texts
         floatingTextsRef.current = floatingTextsRef.current
@@ -479,11 +560,10 @@ const NeonRacerGame = () => {
 
       /* ── RENDER ── */
       ctx.save();
-      // Screen shake offset
       if (shakeRef.current > 0) {
         const sx = (Math.random() - 0.5) * shakeRef.current * 2;
         const sy = (Math.random() - 0.5) * shakeRef.current * 2;
-        ctx.translate(sx, sy);
+        ctx.translate(Math.round(sx), Math.round(sy));
       }
 
       const skyGrad = ctx.createLinearGradient(0, 0, 0, H / 2);
@@ -537,46 +617,56 @@ const NeonRacerGame = () => {
       ctx.closePath();
       ctx.fill();
 
-      // Road rendering
+      // Road rendering — strict back-to-front with sub-pixel rounding
       if (road.length > 0) {
-        const camZ = posRef.current;
+        const lapWorldLength = lapLength * SEG_LENGTH;
+        const worldPos = posRef.current % lapWorldLength;
+        const camZ = worldPos;
         const startIdx = Math.floor(camZ / SEG_LENGTH);
         let maxy = H;
         let dx = 0;
         let x = 0;
 
-        const drawDist = Math.min(DRAW_DISTANCE, totalSegs - startIdx);
+        const drawDist = Math.min(DRAW_DISTANCE, lapLength);
 
+        // Forward pass: project all visible segments
         for (let n = 0; n < drawDist; n++) {
-          const idx = startIdx + n;
-          if (idx >= totalSegs) break;
+          const idx = (startIdx + n) % lapLength;
           const seg = road[idx];
 
-          project(seg, playerXRef.current * ROAD_WIDTH / 2 - x, CAM_HEIGHT + seg.y, camZ, W, H);
+          // Compute virtual Z for projection (continuous, not wrapped)
+          const virtualZ = startIdx * SEG_LENGTH + n * SEG_LENGTH;
+
+          // Temporarily set seg.z to virtualZ for projection
+          const origZ = seg.z;
+          seg.z = virtualZ;
+          projectSeg(seg, playerXRef.current * ROAD_WIDTH / 2 - x, CAM_HEIGHT + seg.y, camZ, W, H);
+          seg.z = origZ;
 
           x += dx;
-          dx += seg.curve * seg.pscale;
+          dx += seg.curve * (seg.pscale > 0 ? seg.pscale : 0);
 
-          seg.px += x;
+          seg.px = Math.round(seg.px + x);
           seg.clip = maxy;
-          if (seg.py < maxy) maxy = seg.py;
+          if (seg.py < maxy) maxy = Math.round(seg.py);
         }
 
+        // Back-to-front rendering (painters algorithm)
         for (let n = drawDist - 1; n > 0; n--) {
-          const idx = startIdx + n;
-          if (idx >= totalSegs) continue;
+          const idx = (startIdx + n) % lapLength;
           const seg = road[idx];
-          const prevIdx = startIdx + n - 1;
-          if (prevIdx < 0 || prevIdx >= totalSegs) continue;
+          const prevIdx = (startIdx + n - 1) % lapLength;
           const prev = road[prevIdx];
 
           if (seg.pscale <= 0 || prev.pscale <= 0) continue;
+          // Clip: don't draw below already-drawn closer road
+          if (prev.py <= seg.clip) continue;
 
-          const isOdd = (Math.floor(idx / 3) % 2) === 0;
+          const isOdd = (Math.floor(n / 3) % 2) === 0;
 
           // Grass
           ctx.fillStyle = isOdd ? COL_GRASS_DARK : COL_GRASS_LIGHT;
-          ctx.fillRect(0, prev.py, W, seg.py - prev.py);
+          ctx.fillRect(0, Math.round(prev.py), W, Math.round(seg.py - prev.py + 1));
 
           // Finish line checkered pattern
           if (seg.finish) {
@@ -588,7 +678,6 @@ const NeonRacerGame = () => {
                 cx1, prev.py, checkerSize * 0.5,
                 cx2, seg.py, checkerSize * 0.5);
             }
-            // Rumble still visible
             drawPoly(ctx, isOdd ? COL_RUMBLE_DARK : COL_RUMBLE_LIGHT,
               prev.px, prev.py, prev.pw * 1.15,
               seg.px, seg.py, seg.pw * 1.15);
@@ -620,8 +709,8 @@ const NeonRacerGame = () => {
             ctx.strokeStyle = "#00FFFF15";
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.moveTo(0, seg.py);
-            ctx.lineTo(W, seg.py);
+            ctx.moveTo(0, Math.round(seg.py));
+            ctx.lineTo(W, Math.round(seg.py));
             ctx.stroke();
           }
 
@@ -641,7 +730,6 @@ const NeonRacerGame = () => {
             ctx.fillStyle = "#00FFFF40";
             ctx.fillRect(gx - gateW, gy - gateH - 2, gateW * 2, 3);
             ctx.shadowBlur = 0;
-            // Label
             ctx.font = "bold 8px 'Press Start 2P', monospace";
             ctx.fillStyle = "#00FFFF";
             ctx.textAlign = "center";
@@ -666,25 +754,6 @@ const NeonRacerGame = () => {
             ctx.beginPath();
             ctx.arc(sx - sw * 0.2, sy - sh * 0.8, sw * 0.3, 0, Math.PI * 2);
             ctx.fill();
-          }
-
-          // Enemy cars
-          for (const e of enemiesRef.current) {
-            const eIdx = Math.floor(e.segIdx);
-            if (eIdx === idx && seg.pscale > 0) {
-              const carScale = seg.pscale * 2000;
-              const cx = seg.px + e.offset * seg.pw;
-              const cy = seg.py;
-              const cw = carScale * 0.35;
-              const ch = carScale * 0.25;
-              ctx.fillStyle = "#FF007F";
-              ctx.fillRect(cx - cw / 2, cy - ch, cw, ch);
-              ctx.fillStyle = "#00FFFF80";
-              ctx.fillRect(cx - cw * 0.3, cy - ch * 0.9, cw * 0.6, ch * 0.3);
-              ctx.fillStyle = "#FFFF0060";
-              ctx.fillRect(cx - cw * 0.4, cy - ch * 0.2, cw * 0.15, ch * 0.15);
-              ctx.fillRect(cx + cw * 0.25, cy - ch * 0.2, cw * 0.15, ch * 0.15);
-            }
           }
         }
       }
@@ -711,6 +780,12 @@ const NeonRacerGame = () => {
           ctx.fillStyle = grad2;
           ctx.fillRect(W * 0.85, H * 0.4, W * 0.15, H * 0.6);
         }
+
+        // Mini-boost flash
+        if (miniBoostRef.current > 0) {
+          ctx.fillStyle = `rgba(255, 200, 0, ${0.04 + Math.random() * 0.03})`;
+          ctx.fillRect(0, 0, W, H);
+        }
       }
 
       // Player car
@@ -720,8 +795,11 @@ const NeonRacerGame = () => {
         const carX = W / 2;
         const carY = H - 60;
 
-        // Car rotation based on steering
-        const steerAngle = (targetXRef.current / 2.5) * 0.15;
+        // Car rotation: enhanced during drift
+        const isDrifting = driftStateRef.current === "drifting" || driftStateRef.current === "charging";
+        const driftTilt = isDrifting ? driftDirRef.current * 0.25 : 0;
+        const steerAngle = (targetXRef.current / 2.5) * 0.15 + driftTilt;
+
         ctx.save();
         ctx.translate(carX, carY + carH / 2);
         ctx.rotate(steerAngle);
@@ -731,9 +809,19 @@ const NeonRacerGame = () => {
         ctx.fillRect(carX - carW / 2 - 3, carY - 3, carW + 6, carH + 6);
 
         const carGrad = ctx.createLinearGradient(carX - carW / 2, carY, carX + carW / 2, carY);
-        carGrad.addColorStop(0, "#00FFFF");
-        carGrad.addColorStop(0.5, "#0088FF");
-        carGrad.addColorStop(1, "#00FFFF");
+        if (isDrifting) {
+          carGrad.addColorStop(0, "#FF007F");
+          carGrad.addColorStop(0.5, "#FF4500");
+          carGrad.addColorStop(1, "#FF007F");
+        } else if (miniBoostRef.current > 0) {
+          carGrad.addColorStop(0, "#FFFF00");
+          carGrad.addColorStop(0.5, "#FF8800");
+          carGrad.addColorStop(1, "#FFFF00");
+        } else {
+          carGrad.addColorStop(0, "#00FFFF");
+          carGrad.addColorStop(0.5, "#0088FF");
+          carGrad.addColorStop(1, "#00FFFF");
+        }
         ctx.fillStyle = carGrad;
         ctx.fillRect(carX - carW / 2, carY, carW, carH);
 
@@ -744,28 +832,32 @@ const NeonRacerGame = () => {
         ctx.fillRect(carX - carW / 2, carY + carH - 5, 8, 5);
         ctx.fillRect(carX + carW / 2 - 8, carY + carH - 5, 8, 5);
 
-        if (boostRef.current > 0) {
-          ctx.fillStyle = "#FF007F90";
+        // Drift sparks
+        if (isDrifting) {
+          for (let sp = 0; sp < 3; sp++) {
+            ctx.fillStyle = `rgba(255, ${150 + Math.random() * 105}, 0, ${0.5 + Math.random() * 0.5})`;
+            const spx = carX + (driftDirRef.current > 0 ? -carW / 2 - 5 : carW / 2 + 5) + (Math.random() - 0.5) * 10;
+            const spy = carY + carH - 2 + Math.random() * 8;
+            ctx.fillRect(spx, spy, 3, 3);
+          }
+        }
+
+        // Mini-boost flame
+        if (miniBoostRef.current > 0) {
+          ctx.fillStyle = "#FFFF0090";
           ctx.fillRect(carX - 8, carY + carH, 6, 10 + Math.random() * 10);
           ctx.fillRect(carX + 2, carY + carH, 6, 10 + Math.random() * 10);
         }
 
         ctx.restore();
-
-        // Boost screen flash
-        if (boostRef.current > 0) {
-          ctx.fillStyle = `rgba(255, 0, 127, ${0.03 + Math.random() * 0.03})`;
-          ctx.fillRect(0, 0, W, H);
-        }
       }
 
       // Canvas HUD
       if (stateRef.current === "playing") {
-        // Speed + Time panel
         ctx.fillStyle = "rgba(10, 0, 30, 0.7)";
         ctx.strokeStyle = "#00FFFF40";
         ctx.lineWidth = 1;
-        const hudX = 10, hudY = 10, hudW = 160, hudH = 70;
+        const hudX = 10, hudY = 10, hudW = 170, hudH = 80;
         ctx.beginPath();
         ctx.roundRect(hudX, hudY, hudW, hudH, 8);
         ctx.fill();
@@ -779,20 +871,28 @@ const NeonRacerGame = () => {
         ctx.fillStyle = tColor;
         ctx.fillText(`TIME ${Math.ceil(timerRef.current)}s`, hudX + 10, hudY + 42);
 
-        ctx.fillStyle = "#FFFFFF60";
+        ctx.fillStyle = "#FFFFFF";
         ctx.font = "7px 'Press Start 2P', monospace";
-        const prog = Math.min(100, (posRef.current / (totalSegsRef.current * SEG_LENGTH)) * 100);
-        ctx.fillText(`LAP ${Math.floor(prog)}%`, hudX + 10, hudY + 58);
+        ctx.fillText(`LAP ${currentLapRef.current}/${TOTAL_LAPS}`, hudX + 10, hudY + 58);
 
-        // Boost indicator
-        if (boostCoolRef.current <= 0 && speedRef.current > MAX_SPEED * 0.3) {
+        if (bestLapTimeRef.current !== null) {
           ctx.fillStyle = "#FFFF00";
-          ctx.font = "7px 'Press Start 2P', monospace";
-          ctx.fillText("BOOST READY", W - 120, 25);
-        } else if (boostRef.current > 0) {
+          ctx.fillText(`BEST ${bestLapTimeRef.current.toFixed(1)}s`, hudX + 10, hudY + 72);
+        }
+
+        // Drift indicator
+        if (driftStateRef.current === "drifting") {
           ctx.fillStyle = "#FF007F";
-          ctx.font = "7px 'Press Start 2P', monospace";
-          ctx.fillText("BOOST!", W - 80, 25);
+          ctx.font = "bold 10px 'Press Start 2P', monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("🔥 DRIFT!", W / 2, 30);
+          ctx.textAlign = "left";
+        } else if (miniBoostRef.current > 0) {
+          ctx.fillStyle = "#FFFF00";
+          ctx.font = "bold 10px 'Press Start 2P', monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("⚡ BOOST!", W / 2, 30);
+          ctx.textAlign = "left";
         }
 
         // Off-road warning
@@ -800,7 +900,7 @@ const NeonRacerGame = () => {
           ctx.fillStyle = "#FF007F";
           ctx.font = "bold 10px 'Press Start 2P', monospace";
           ctx.textAlign = "center";
-          ctx.fillText("⚠ OFF ROAD ⚠", W / 2, 30);
+          ctx.fillText("⚠ OFF ROAD ⚠", W / 2, 50);
           ctx.textAlign = "left";
         }
       }
@@ -826,7 +926,7 @@ const NeonRacerGame = () => {
 
     animRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animRef.current);
-  }, [isLeft, isRight, isAccel, isBrake]);
+  }, [isLeft, isRight, isAccel, isBrake, isHandbrake]);
 
   const schemes: ControlScheme[] = ["arrows", "qwerty", "azerty"];
   const isEndState = gameState === "gameover" || gameState === "finished";
@@ -842,7 +942,12 @@ const NeonRacerGame = () => {
 
         {/* Lap Progress */}
         <div className="flex-1 mx-4">
-          <span className="text-[9px] text-muted-foreground font-pixel block text-center mb-1">LAP PROGRESS</span>
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-[9px] text-muted-foreground font-pixel">LAP {currentLap}/{TOTAL_LAPS}</span>
+            {bestLapTime !== null && (
+              <span className="text-[9px] text-neon-yellow font-pixel">BEST {bestLapTime.toFixed(1)}s</span>
+            )}
+          </div>
           <Progress value={lapProgress} className="h-2 bg-muted/30" />
         </div>
 
@@ -902,7 +1007,8 @@ const NeonRacerGame = () => {
         {gameState === "idle" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center glass rounded-lg">
             <h2 className="font-pixel text-sm text-secondary neon-text-pink mb-2">NEON RACER</h2>
-            <p className="font-pixel text-[8px] text-primary neon-text-cyan mb-4">CIRCUIT MODE</p>
+            <p className="font-pixel text-[8px] text-primary neon-text-cyan mb-1">THE NEON LOOP — {TOTAL_LAPS} LAPS</p>
+            <p className="font-pixel text-[7px] text-neon-yellow mb-4">HOLD TURN + SPACE TO DRIFT</p>
             <p className="text-muted-foreground text-sm mb-6 text-center px-4">
               {SCHEME_HINT[controlScheme]}
             </p>
@@ -922,7 +1028,12 @@ const NeonRacerGame = () => {
               {gameState === "finished" ? "CIRCUIT COMPLETE!" : crashReason || "GAME OVER"}
             </h2>
             {gameState === "finished" && (
-              <p className="font-pixel text-[8px] text-neon-yellow mb-1">TIME BONUS: {Math.floor(timerRef.current * 100)}</p>
+              <>
+                <p className="font-pixel text-[8px] text-neon-yellow mb-1">TIME BONUS: {Math.floor(timerRef.current * 100)}</p>
+                {bestLapTime !== null && (
+                  <p className="font-pixel text-[8px] text-primary mb-1">BEST LAP: {bestLapTime.toFixed(2)}s</p>
+                )}
+              </>
             )}
             <p className="font-pixel text-xs text-primary neon-text-cyan mb-3">{score} PTS</p>
             <GameOverLeaderboard gameId="racer" score={score} />
