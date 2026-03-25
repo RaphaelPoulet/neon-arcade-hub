@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { Settings } from "lucide-react";
 import { toast } from "sonner";
+import GameOverLeaderboard from "@/components/GameOverLeaderboard";
 
 // --- Types ---
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
@@ -1023,13 +1024,14 @@ const CyberManGame = () => {
         )}
 
         {gameState === "gameover" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center glass rounded-lg">
+          <div className="absolute inset-0 flex flex-col items-center justify-center glass rounded-lg overflow-y-auto py-4">
             <h2 className="font-pixel text-sm text-secondary neon-text-pink mb-2">GAME OVER</h2>
             {scoreRef.current >= bestRef.current && scoreRef.current > 0 && (
               <p className="font-pixel text-[10px] text-neon-yellow animate-pulse-neon mb-2">🏆 NEW RECORD!</p>
             )}
-            <p className="font-pixel text-xs text-primary neon-text-cyan mb-6">{score} PTS</p>
-            <button onClick={startGame} className="bg-secondary text-secondary-foreground font-pixel text-[10px] px-6 py-3 rounded-lg neon-glow-pink hover:scale-105 active:scale-95 transition-transform">
+            <p className="font-pixel text-xs text-primary neon-text-cyan mb-3">{score} PTS</p>
+            <GameOverLeaderboard gameId="pacman" score={score} />
+            <button onClick={startGame} className="bg-secondary text-secondary-foreground font-pixel text-[10px] px-6 py-3 rounded-lg neon-glow-pink hover:scale-105 active:scale-95 transition-transform mt-3">
               INSERT COIN TO REPLAY
             </button>
           </div>
