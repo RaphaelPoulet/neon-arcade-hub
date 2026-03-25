@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { Settings } from "lucide-react";
 import { toast } from "sonner";
+import GameOverLeaderboard from "@/components/GameOverLeaderboard";
 
 type ControlScheme = "arrows" | "qwerty" | "azerty";
 type GameState = "idle" | "playing" | "gameover";
