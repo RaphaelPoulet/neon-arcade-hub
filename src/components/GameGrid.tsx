@@ -2,6 +2,7 @@ import GameCard from "./GameCard";
 import gameSnake from "@/assets/game-snake.jpg";
 import gameInvaders from "@/assets/game-invaders.jpg";
 import gamePacman from "@/assets/game-pacman.jpg";
+import gameRacer from "@/assets/game-racer.jpg";
 
 const games = [
   {
@@ -24,6 +25,13 @@ const games = [
     image: gamePacman,
     highScore: 89200,
     slug: "phantom-maze",
+  },
+  {
+    title: "Super Kart Racer",
+    description: "SNES Mode-7 style arcade circuit. 3 laps, tight drifts and a mini boost on release.",
+    image: gameRacer,
+    highScore: 0,
+    slug: "super-kart",
   },
 ];
 
