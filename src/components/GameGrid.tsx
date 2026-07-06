@@ -2,7 +2,6 @@ import GameCard from "./GameCard";
 import gameSnake from "@/assets/game-snake.jpg";
 import gameInvaders from "@/assets/game-invaders.jpg";
 import gamePacman from "@/assets/game-pacman.jpg";
-import gameRacer from "@/assets/game-racer.jpg";
 
 const games = [
   {
@@ -25,13 +24,6 @@ const games = [
     image: gamePacman,
     highScore: 89200,
     slug: "phantom-maze",
-  },
-  {
-    title: "Neon Racer",
-    description: "High-speed outrun action on infinite neon highways. Dodge, drift, and survive.",
-    image: gameRacer,
-    highScore: 67400,
-    slug: "neon-racer",
   },
 ];
 
