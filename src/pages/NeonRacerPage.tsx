@@ -16,10 +16,10 @@ const NeonRacerPage = () => {
         >
           <div className="text-center mb-6">
             <h1 className="font-pixel text-lg sm:text-xl text-secondary neon-text-pink mb-2">
-              Neon Racer
+              Super Kart Racer
             </h1>
             <p className="text-sm text-muted-foreground">
-              High-speed outrun action on infinite neon highways
+              SNES Mode-7 style circuit racing · Drift to victory
             </p>
           </div>
 
