@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import GameOverLeaderboard from "@/components/GameOverLeaderboard";
 
 // ============================================================
-// NEON PINBALL — Phase 1: physics, table & flippers
+// NEON PINBALL — Phase 1.1: sealed walls, instant launch, bumpers
 // ============================================================
 
 type GameState = "idle" | "ready" | "playing" | "gameover";
@@ -13,80 +13,83 @@ type ControlScheme = "arrows" | "qwerty" | "azerty";
 const WIDTH = 500;
 const HEIGHT = 800;
 
-// --- Physics constants (Classic arcade / bouncy) ---
-const GRAVITY = 1400;          // px / s²
-const RESTITUTION = 0.75;      // wall bounciness
+// --- Physics ---
+const GRAVITY = 1400;
+const RESTITUTION = 0.75;
 const FLIPPER_RESTITUTION = 0.55;
-const FRICTION = 0.999;        // per-frame velocity damp
-const MAX_SPEED = 2400;        // px / s clamp to avoid tunneling
-const SUBSTEPS = 6;            // physics sub-steps per frame
+const BUMPER_RESTITUTION = 1.4;
+const FRICTION = 0.999;
+const MAX_SPEED = 2400;
+const SUBSTEPS = 6;
 
 // --- Ball ---
 const BALL_R = 11;
 
-// --- Launcher ---
-const LANE_X = WIDTH - 34;     // right-side launcher lane center
-const LANE_W = 28;
-const LANE_TOP = 120;
-const PLUNGER_MAX = 1.0;       // 0..1 charge
-const PLUNGER_POWER = 1500;    // impulse (upward) per charge unit
+// --- Launcher lane ---
+const LANE_W = 30;
+const LANE_X = WIDTH - LANE_W / 2 - 4;      // center of lane
+const LANE_INNER_X = WIDTH - LANE_W - 8;    // inner wall x
+const LANE_TOP_Y = 140;
+const LANE_BOTTOM_Y = HEIGHT - 40;          // lane goes almost to bottom
+const LAUNCH_IMPULSE = 1450;                // instant upward velocity on Space
 
 // --- Flippers ---
-const FLIPPER_LEN = 70;
-const FLIPPER_W = 12;
-const PIVOT_Y = 720;
-const PIVOT_L_X = 175;
-const PIVOT_R_X = 325;
-const REST_ANGLE = (25 * Math.PI) / 180;   // from horizontal, downward
-const ACTIVE_ANGLE = (30 * Math.PI) / 180; // upward from horizontal
-const FLIPPER_UP_SPEED = 26;   // rad / s
-const FLIPPER_DOWN_SPEED = 14; // rad / s
+const FLIPPER_LEN = 78;
+const FLIPPER_W = 14;
+const PIVOT_Y = 700;
+const PIVOT_L_X = 170;
+const PIVOT_R_X = 300;
+const REST_ANGLE = (28 * Math.PI) / 180;
+const ACTIVE_ANGLE = (32 * Math.PI) / 180;
+const FLIPPER_UP_SPEED = 28;
+const FLIPPER_DOWN_SPEED = 14;
 
-// --- Table geometry (line walls) ---
-// left flipper: at rest arm points from pivot down-right
-// right flipper: arm points down-left
-// drain gap between flipper tips.
+// --- Bumpers ---
+interface Bumper { x: number; y: number; r: number; flash: number; }
+const BUMPERS_INIT: Bumper[] = [
+  { x: 140, y: 230, r: 26, flash: 0 },
+  { x: 320, y: 200, r: 26, flash: 0 },
+  { x: 230, y: 340, r: 28, flash: 0 },
+];
+
+// --- Walls ---
 interface Wall { x1: number; y1: number; x2: number; y2: number; }
-
 const WALLS: Wall[] = [
   // outer left
   { x1: 0, y1: 0, x2: 0, y2: HEIGHT },
-  // outer right (launcher wall)
+  // outer right
   { x1: WIDTH, y1: 0, x2: WIDTH, y2: HEIGHT },
-  // top arch (segments)
+  // top arch
   { x1: 0, y1: 120, x2: 90, y2: 40 },
   { x1: 90, y1: 40, x2: WIDTH - 90, y2: 40 },
   { x1: WIDTH - 90, y1: 40, x2: WIDTH, y2: 120 },
-  // launcher inner wall (divides lane from playfield) — stops above bottom to let ball into playfield
-  { x1: WIDTH - LANE_W - 6, y1: 140, x2: WIDTH - LANE_W - 6, y2: HEIGHT - 160 },
-  // curved rail leading from lane top into playfield (single segment)
-  { x1: WIDTH - LANE_W - 6, y1: 140, x2: WIDTH - 90, y2: 80 },
-  // bottom-left slope leading to left flipper
-  { x1: 0, y1: HEIGHT - 120, x2: PIVOT_L_X - 30, y2: PIVOT_Y + 10 },
-  // bottom-right slope leading to right flipper
-  { x1: WIDTH - LANE_W - 6, y1: HEIGHT - 160, x2: PIVOT_R_X + 30, y2: PIVOT_Y + 10 },
+  // launcher inner wall (full lane, top to bottom)
+  { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y },
+  // curved rail from lane top into playfield (one-way deflector)
+  { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: WIDTH - 90, y2: 80 },
+  // bottom-left slope: from outer wall directly to left pivot (sealed)
+  { x1: 0, y1: HEIGHT - 160, x2: PIVOT_L_X, y2: PIVOT_Y },
+  // bottom-right slope: from launcher inner wall directly to right pivot (sealed)
+  { x1: LANE_INNER_X, y1: HEIGHT - 200, x2: PIVOT_R_X, y2: PIVOT_Y },
+  // bottom floor pieces from outer walls up to slope start (side outlanes closed)
+  { x1: 0, y1: HEIGHT, x2: 0, y2: HEIGHT - 160 },
+  { x1: LANE_INNER_X, y1: HEIGHT - 200, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y },
 ];
 
-// Drain zone: any ball with y > DRAIN_Y and x between flipper tips is lost
-const DRAIN_Y = HEIGHT - 20;
+// Drain zone: ONLY between the two flipper pivots
+const DRAIN_Y = HEIGHT - 10;
+const DRAIN_X_MIN = PIVOT_L_X + 8;
+const DRAIN_X_MAX = PIVOT_R_X - 8;
 
 // --- Controls ---
-type Action = "leftFlip" | "rightFlip" | "plunger";
+type Action = "leftFlip" | "rightFlip" | "launch";
 const CONTROL_MAPS: Record<ControlScheme, Record<string, Action>> = {
-  arrows: {
-    ArrowLeft: "leftFlip", ArrowRight: "rightFlip", " ": "plunger",
-  },
-  qwerty: {
-    a: "leftFlip", A: "leftFlip", l: "rightFlip", L: "rightFlip", " ": "plunger",
-  },
-  azerty: {
-    q: "leftFlip", Q: "leftFlip", m: "rightFlip", M: "rightFlip", " ": "plunger",
-  },
+  arrows: { ArrowLeft: "leftFlip", ArrowRight: "rightFlip", " ": "launch" },
+  qwerty: { a: "leftFlip", A: "leftFlip", l: "rightFlip", L: "rightFlip", " ": "launch" },
+  azerty: { q: "leftFlip", Q: "leftFlip", m: "rightFlip", M: "rightFlip", " ": "launch" },
 };
 const CONTROL_LABELS: Record<ControlScheme, string> = {
-  arrows: "Arrows",
-  qwerty: "A / L",
-  azerty: "Q / M",
+  arrows: "Arrows", qwerty: "A / L", azerty: "Q / M",
 };
 const HINT: Record<ControlScheme, string> = {
   arrows: "← left flipper  → right flipper  SPACE launch",
@@ -94,7 +97,6 @@ const HINT: Record<ControlScheme, string> = {
   azerty: "Q flipper gauche  M flipper droit  ESPACE lancer",
 };
 
-// --- Colors ---
 const C = {
   bg: "hsl(240, 40%, 6%)",
   playfield: "hsl(255, 45%, 10%)",
@@ -105,10 +107,11 @@ const C = {
   flipper: "hsl(320, 100%, 60%)",
   flipperGlow: "hsla(320, 100%, 60%, 0.5)",
   drain: "hsla(0, 90%, 55%, 0.25)",
-  plunger: "hsl(50, 100%, 60%)",
+  bumper: "hsl(280, 100%, 65%)",
+  bumperGlow: "hsla(280, 100%, 70%, 0.7)",
+  bumperFlash: "hsl(60, 100%, 85%)",
 };
 
-// ---- math helpers ----
 function segClosestPoint(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
   const dx = x2 - x1, dy = y2 - y1;
   const l2 = dx * dx + dy * dy;
@@ -118,9 +121,7 @@ function segClosestPoint(px: number, py: number, x1: number, y1: number, x2: num
   return { x: x1 + t * dx, y: y1 + t * dy, t };
 }
 
-interface Ball {
-  x: number; y: number; vx: number; vy: number; alive: boolean;
-}
+interface Ball { x: number; y: number; vx: number; vy: number; alive: boolean; }
 
 const NeonPinballGame = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -146,22 +147,16 @@ const NeonPinballGame = () => {
     return s ? parseInt(s) : 0;
   });
 
-  // physics refs
-  const ballRef = useRef<Ball>({ x: LANE_X, y: HEIGHT - 60, vx: 0, vy: 0, alive: false });
-  const plungerRef = useRef(0); // 0..1 charge
-  const plungerHoldRef = useRef(false);
+  const ballRef = useRef<Ball>({ x: LANE_X, y: LANE_BOTTOM_Y - BALL_R - 4, vx: 0, vy: 0, alive: false });
+  const bumpersRef = useRef<Bumper[]>(BUMPERS_INIT.map(b => ({ ...b })));
 
-  // flippers: angle relative to horizontal, negative = below horizontal
-  // left rest = -REST_ANGLE (arm below), left active = +ACTIVE_ANGLE (arm above)
-  // right flipper is mirrored: its arm extends from pivot at angle π - a
   const leftFlipRef = useRef({ angle: -REST_ANGLE, target: -REST_ANGLE, omega: 0 });
   const rightFlipRef = useRef({ angle: -REST_ANGLE, target: -REST_ANGLE, omega: 0 });
 
-  const keysRef = useRef<Record<Action, boolean>>({
-    leftFlip: false, rightFlip: false, plunger: false,
-  });
+  const keysRef = useRef<Record<Action, boolean>>({ leftFlip: false, rightFlip: false, launch: false });
 
-  // --- Keyboard ---
+  const startGameRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
       const a = CONTROL_MAPS[controlRef.current][e.key];
@@ -171,11 +166,17 @@ const NeonPinballGame = () => {
           keysRef.current[a] = true;
           if (a === "leftFlip") leftFlipRef.current.target = ACTIVE_ANGLE;
           if (a === "rightFlip") rightFlipRef.current.target = ACTIVE_ANGLE;
-          if (a === "plunger") plungerHoldRef.current = true;
+          if (a === "launch") {
+            if (stateRef.current === "ready" && ballRef.current.alive) {
+              ballRef.current.vy = -LAUNCH_IMPULSE;
+              ballRef.current.vx = 0;
+              setGameState("playing");
+            }
+          }
         }
       }
       if (e.key === "Enter" && (stateRef.current === "idle" || stateRef.current === "gameover")) {
-        startGame();
+        startGameRef.current();
       }
     };
     const onUp = (e: KeyboardEvent) => {
@@ -185,17 +186,6 @@ const NeonPinballGame = () => {
         keysRef.current[a] = false;
         if (a === "leftFlip") leftFlipRef.current.target = -REST_ANGLE;
         if (a === "rightFlip") rightFlipRef.current.target = -REST_ANGLE;
-        if (a === "plunger") {
-          // release plunger — if ball is in lane, launch
-          if (stateRef.current === "ready" && ballRef.current.alive) {
-            const power = plungerRef.current * PLUNGER_POWER + 300;
-            ballRef.current.vy = -power / 60 * 60; // upward
-            ballRef.current.vy = -Math.max(600, plungerRef.current * PLUNGER_POWER + 400);
-            setGameState("playing");
-          }
-          plungerRef.current = 0;
-          plungerHoldRef.current = false;
-        }
       }
     };
     window.addEventListener("keydown", onDown);
@@ -207,8 +197,7 @@ const NeonPinballGame = () => {
   }, []);
 
   const resetBallToLauncher = useCallback(() => {
-    ballRef.current = { x: LANE_X, y: HEIGHT - 60, vx: 0, vy: 0, alive: true };
-    plungerRef.current = 0;
+    ballRef.current = { x: LANE_X, y: LANE_BOTTOM_Y - BALL_R - 4, vx: 0, vy: 0, alive: true };
     setGameState("ready");
   }, []);
 
@@ -217,8 +206,10 @@ const NeonPinballGame = () => {
     ballNumRef.current = 1;
     setScore(0);
     setBallNum(1);
+    bumpersRef.current = BUMPERS_INIT.map(b => ({ ...b }));
     resetBallToLauncher();
   }, [resetBallToLauncher]);
+  useEffect(() => { startGameRef.current = startGame; }, [startGame]);
 
   const handleSchemeChange = (s: ControlScheme) => {
     setControlScheme(s);
@@ -227,7 +218,6 @@ const NeonPinballGame = () => {
     toast(`Controls: ${CONTROL_LABELS[s]}`, { duration: 1500, className: "font-pixel" });
   };
 
-  // --- Loop ---
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -245,53 +235,63 @@ const NeonPinballGame = () => {
     const flipperEndpoints = () => {
       const L = leftFlipRef.current.angle;
       const R = rightFlipRef.current.angle;
-      // left arm points to right by default (angle 0 = horizontal right), negative angle = below
       const lx = PIVOT_L_X + Math.cos(L) * FLIPPER_LEN;
-      const ly = PIVOT_Y - Math.sin(L) * FLIPPER_LEN; // canvas y inverted
-      // right arm points to left: angle π - R
+      const ly = PIVOT_Y - Math.sin(L) * FLIPPER_LEN;
       const ra = Math.PI - R;
       const rx = PIVOT_R_X + Math.cos(ra) * FLIPPER_LEN;
       const ry = PIVOT_Y - Math.sin(ra) * FLIPPER_LEN;
       return { lx, ly, rx, ry };
     };
 
-    const collideBallWithSegment = (
+    const collideSeg = (
       b: Ball, x1: number, y1: number, x2: number, y2: number,
       restitution: number, extraVel?: { vx: number; vy: number }
     ) => {
       const cp = segClosestPoint(b.x, b.y, x1, y1, x2, y2);
       const dx = b.x - cp.x;
       const dy = b.y - cp.y;
-      const dist2 = dx * dx + dy * dy;
+      const d2 = dx * dx + dy * dy;
       const r = BALL_R;
-      if (dist2 > r * r) return false;
-      const dist = Math.sqrt(dist2) || 0.0001;
-      const nx = dx / dist;
-      const ny = dy / dist;
-      // push out
-      const pen = r - dist;
-      b.x += nx * pen;
-      b.y += ny * pen;
-      // relative velocity (account for moving flipper surface)
+      if (d2 > r * r) return false;
+      const dist = Math.sqrt(d2) || 0.0001;
+      const nx = dx / dist, ny = dy / dist;
+      b.x += nx * (r - dist);
+      b.y += ny * (r - dist);
       let rvx = b.vx, rvy = b.vy;
       if (extraVel) { rvx -= extraVel.vx; rvy -= extraVel.vy; }
       const vn = rvx * nx + rvy * ny;
       if (vn < 0) {
         const j = -(1 + restitution) * vn;
-        b.vx += j * nx;
-        b.vy += j * ny;
-        // add surface velocity kick
-        if (extraVel) {
-          b.vx += extraVel.vx * 0.4;
-          b.vy += extraVel.vy * 0.4;
-        }
+        b.vx += j * nx; b.vy += j * ny;
+        if (extraVel) { b.vx += extraVel.vx * 0.4; b.vy += extraVel.vy * 0.4; }
+        return true;
+      }
+      return false;
+    };
+
+    const collideBumper = (b: Ball, bm: Bumper) => {
+      const dx = b.x - bm.x, dy = b.y - bm.y;
+      const rSum = BALL_R + bm.r;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > rSum * rSum) return false;
+      const dist = Math.sqrt(d2) || 0.0001;
+      const nx = dx / dist, ny = dy / dist;
+      b.x = bm.x + nx * rSum;
+      b.y = bm.y + ny * rSum;
+      const vn = b.vx * nx + b.vy * ny;
+      if (vn < 0) {
+        const j = -(1 + BUMPER_RESTITUTION) * vn;
+        b.vx += j * nx; b.vy += j * ny;
+        // extra kick
+        b.vx += nx * 120; b.vy += ny * 120;
+        bm.flash = 0.25;
+        scoreRef.current += 100;
         return true;
       }
       return false;
     };
 
     const step = (dt: number) => {
-      // Flipper angular update
       const updateFlip = (f: { angle: number; target: number; omega: number }) => {
         const diff = f.target - f.angle;
         const speed = f.target > f.angle ? FLIPPER_UP_SPEED : FLIPPER_DOWN_SPEED;
@@ -303,77 +303,61 @@ const NeonPinballGame = () => {
       updateFlip(leftFlipRef.current);
       updateFlip(rightFlipRef.current);
 
-      // Plunger charge
-      if (plungerHoldRef.current && stateRef.current === "ready") {
-        plungerRef.current = Math.min(PLUNGER_MAX, plungerRef.current + dt * 1.2);
-      }
+      // decay bumper flashes
+      for (const bm of bumpersRef.current) if (bm.flash > 0) bm.flash = Math.max(0, bm.flash - dt);
 
       if (stateRef.current !== "playing" && stateRef.current !== "ready") return;
       const b = ballRef.current;
       if (!b.alive) return;
 
-      // ready-state: keep ball parked at bottom of lane
       if (stateRef.current === "ready") {
         b.x = LANE_X;
-        b.y = HEIGHT - 60;
+        b.y = LANE_BOTTOM_Y - BALL_R - 4;
         b.vx = 0; b.vy = 0;
         return;
       }
 
-      // sub-step physics
       const sdt = dt / SUBSTEPS;
       for (let s = 0; s < SUBSTEPS; s++) {
         b.vy += GRAVITY * sdt;
         b.vx *= FRICTION;
         b.vy *= FRICTION;
-        // clamp
         const sp = Math.hypot(b.vx, b.vy);
         if (sp > MAX_SPEED) { b.vx *= MAX_SPEED / sp; b.vy *= MAX_SPEED / sp; }
         b.x += b.vx * sdt;
         b.y += b.vy * sdt;
 
-        // walls
-        for (const w of WALLS) {
-          if (collideBallWithSegment(b, w.x1, w.y1, w.x2, w.y2, RESTITUTION)) {
-            scoreRef.current += 10;
-          }
-        }
+        for (const w of WALLS) collideSeg(b, w.x1, w.y1, w.x2, w.y2, RESTITUTION);
 
-        // flippers as thick segments (approx: line segment, ball radius already includes half thickness)
         const { lx, ly, rx, ry } = flipperEndpoints();
-        // left flipper: surface point velocity at closest point
         {
           const cp = segClosestPoint(b.x, b.y, PIVOT_L_X, PIVOT_Y, lx, ly);
-          const rX = cp.x - PIVOT_L_X;
-          const rY = cp.y - PIVOT_Y;
-          // omega positive means angle increasing; in screen coords, tangent = (-rY, rX) scaled by -omega (because y inverted)
           const w = leftFlipRef.current.omega;
-          const vSurfX = -w * (-rY); //  = w * rY... simplified below
-          const vSurfY = -w * (rX);
-          if (collideBallWithSegment(b, PIVOT_L_X, PIVOT_Y, lx, ly, FLIPPER_RESTITUTION,
-            { vx: w * rY, vy: -w * rX })) {
+          const rX = cp.x - PIVOT_L_X, rY = cp.y - PIVOT_Y;
+          if (collideSeg(b, PIVOT_L_X, PIVOT_Y, lx, ly, FLIPPER_RESTITUTION, { vx: w * rY, vy: -w * rX })) {
             scoreRef.current += 20;
           }
-          void vSurfX; void vSurfY;
         }
-        // right flipper
         {
-          const w = rightFlipRef.current.omega;
-          const rX = 0, rY = 0;
-          void rX; void rY;
-          // For right flipper, angle grows the same way (up); tangent computed identically w.r.t. its pivot
           const cp = segClosestPoint(b.x, b.y, PIVOT_R_X, PIVOT_Y, rx, ry);
-          const rrX = cp.x - PIVOT_R_X;
-          const rrY = cp.y - PIVOT_Y;
-          // right flipper's arm angle is (π - angle) so ω acts with opposite sign on tangent
-          if (collideBallWithSegment(b, PIVOT_R_X, PIVOT_Y, rx, ry, FLIPPER_RESTITUTION,
-            { vx: -w * rrY, vy: w * rrX })) {
+          const w = rightFlipRef.current.omega;
+          const rrX = cp.x - PIVOT_R_X, rrY = cp.y - PIVOT_Y;
+          if (collideSeg(b, PIVOT_R_X, PIVOT_Y, rx, ry, FLIPPER_RESTITUTION, { vx: -w * rrY, vy: w * rrX })) {
             scoreRef.current += 20;
           }
+          void cp;
         }
 
-        // drain
-        if (b.y > DRAIN_Y) {
+        for (const bm of bumpersRef.current) collideBumper(b, bm);
+
+        // drain — only between flipper pivots
+        if (b.y > DRAIN_Y && b.x > DRAIN_X_MIN && b.x < DRAIN_X_MAX) {
+          b.alive = false;
+          onBallLost();
+          break;
+        }
+        // safety: if ball somehow leaves screen bottom outside drain, respawn
+        if (b.y > HEIGHT + 40) {
           b.alive = false;
           onBallLost();
           break;
@@ -383,7 +367,6 @@ const NeonPinballGame = () => {
 
     const onBallLost = () => {
       if (ballNumRef.current >= 3) {
-        // game over
         if (scoreRef.current > highScore) {
           setHighScore(scoreRef.current);
           localStorage.setItem("neon-pinball-hi", String(scoreRef.current));
@@ -399,29 +382,22 @@ const NeonPinballGame = () => {
     };
 
     const render = (ctx: CanvasRenderingContext2D) => {
-      // bg
       ctx.fillStyle = C.bg;
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
-      // playfield gradient
       const g = ctx.createRadialGradient(WIDTH / 2, HEIGHT * 0.4, 40, WIDTH / 2, HEIGHT * 0.5, HEIGHT * 0.8);
       g.addColorStop(0, "hsl(260, 60%, 14%)");
       g.addColorStop(1, C.playfield);
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-      // grid backdrop
       ctx.strokeStyle = "hsla(190, 100%, 60%, 0.06)";
       ctx.lineWidth = 1;
-      for (let x = 0; x < WIDTH; x += 40) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, HEIGHT); ctx.stroke();
-      }
-      for (let y = 0; y < HEIGHT; y += 40) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WIDTH, y); ctx.stroke();
-      }
+      for (let x = 0; x < WIDTH; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, HEIGHT); ctx.stroke(); }
+      for (let y = 0; y < HEIGHT; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WIDTH, y); ctx.stroke(); }
 
-      // drain zone
+      // drain zone (only between pivots)
       ctx.fillStyle = C.drain;
-      ctx.fillRect(0, DRAIN_Y, WIDTH, HEIGHT - DRAIN_Y);
+      ctx.fillRect(DRAIN_X_MIN, DRAIN_Y - 4, DRAIN_X_MAX - DRAIN_X_MIN, HEIGHT - DRAIN_Y + 4);
 
       // walls
       ctx.shadowBlur = 12;
@@ -430,31 +406,42 @@ const NeonPinballGame = () => {
       ctx.lineWidth = 4;
       ctx.lineCap = "round";
       for (const w of WALLS) {
-        ctx.beginPath();
-        ctx.moveTo(w.x1, w.y1);
-        ctx.lineTo(w.x2, w.y2);
-        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(w.x1, w.y1); ctx.lineTo(w.x2, w.y2); ctx.stroke();
       }
       ctx.shadowBlur = 0;
 
-      // launcher plunger indicator
-      const plungerH = plungerRef.current * 100;
-      ctx.fillStyle = "hsla(50, 100%, 60%, 0.9)";
-      ctx.fillRect(LANE_X - 8, HEIGHT - 30 - plungerH, 16, plungerH);
-      ctx.strokeStyle = "hsla(50, 100%, 70%, 0.8)";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(LANE_X - 10, HEIGHT - 130, 20, 100);
+      // bumpers
+      for (const bm of bumpersRef.current) {
+        const flashing = bm.flash > 0;
+        ctx.shadowBlur = flashing ? 40 : 20;
+        ctx.shadowColor = flashing ? C.bumperFlash : C.bumperGlow;
+        const grad = ctx.createRadialGradient(bm.x - 4, bm.y - 4, 2, bm.x, bm.y, bm.r);
+        grad.addColorStop(0, flashing ? C.bumperFlash : "hsl(300, 100%, 85%)");
+        grad.addColorStop(1, C.bumper);
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "hsla(0,0%,100%,0.6)";
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r - 4, 0, Math.PI * 2); ctx.stroke();
+      }
+
+      // launcher chute hint
+      ctx.strokeStyle = "hsla(50, 100%, 60%, 0.4)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(LANE_X - 12, LANE_BOTTOM_Y - 60, 24, 50);
+      ctx.fillStyle = "hsla(50, 100%, 60%, 0.15)";
+      ctx.fillRect(LANE_X - 12, LANE_BOTTOM_Y - 60, 24, 50);
 
       // flippers
       const drawFlipper = (px: number, py: number, angle: number, mirror: boolean) => {
         const a = mirror ? Math.PI - angle : angle;
         ctx.save();
         ctx.translate(px, py);
-        ctx.rotate(-a); // canvas y flipped
+        ctx.rotate(-a);
         ctx.shadowBlur = 16;
         ctx.shadowColor = C.flipperGlow;
         ctx.fillStyle = C.flipper;
-        // draw as rounded rectangle from pivot outward
         const r = FLIPPER_W / 2;
         ctx.beginPath();
         ctx.arc(0, 0, r, Math.PI / 2, -Math.PI / 2, false);
@@ -463,7 +450,6 @@ const NeonPinballGame = () => {
         ctx.lineTo(0, r);
         ctx.closePath();
         ctx.fill();
-        // pivot dot
         ctx.shadowBlur = 0;
         ctx.fillStyle = "hsl(50, 100%, 80%)";
         ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
@@ -494,19 +480,15 @@ const NeonPinballGame = () => {
 
   return (
     <div className="flex flex-col items-center gap-4 w-full max-w-[540px] mx-auto px-4">
-      {/* HUD */}
       <div className="flex items-center justify-between w-full">
         <div className="glass rounded-lg px-3 py-2">
           <span className="text-[9px] text-muted-foreground block">SCORE</span>
-          <span className="font-pixel text-sm text-primary neon-text-cyan">
-            {score.toLocaleString()}
-          </span>
+          <span className="font-pixel text-sm text-primary neon-text-cyan">{score.toLocaleString()}</span>
         </div>
         <div className="glass rounded-lg px-3 py-2 text-center">
           <span className="text-[9px] text-muted-foreground block">BALL</span>
           <span className="font-pixel text-sm text-neon-yellow">{ballNum}/3</span>
         </div>
-
         <div className="relative">
           <button
             onClick={() => setSettingsOpen(o => !o)}
@@ -539,26 +521,17 @@ const NeonPinballGame = () => {
             </>
           )}
         </div>
-
         <div className="glass rounded-lg px-3 py-2 text-right">
           <span className="text-[9px] text-muted-foreground block">HIGH</span>
-          <span className="font-pixel text-sm text-secondary neon-text-pink">
-            {highScore.toLocaleString()}
-          </span>
+          <span className="font-pixel text-sm text-secondary neon-text-pink">{highScore.toLocaleString()}</span>
         </div>
       </div>
 
-      {/* Canvas */}
       <div
         className="relative rounded-lg overflow-hidden neon-glow-cyan"
         style={{ width: "100%", maxWidth: WIDTH, aspectRatio: `${WIDTH} / ${HEIGHT}` }}
       >
-        <canvas
-          ref={canvasRef}
-          width={WIDTH}
-          height={HEIGHT}
-          className="block w-full h-full"
-        />
+        <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} className="block w-full h-full" />
 
         {gameState === "idle" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center glass">
@@ -579,16 +552,14 @@ const NeonPinballGame = () => {
 
         {gameState === "ready" && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 glass rounded-md px-3 py-1.5 font-pixel text-[9px] text-neon-yellow animate-pulse-neon pointer-events-none">
-            HOLD SPACE · RELEASE TO LAUNCH
+            PRESS SPACE TO LAUNCH
           </div>
         )}
 
         {gameState === "gameover" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center glass overflow-y-auto py-4">
             <h2 className="font-pixel text-sm text-secondary neon-text-pink mb-2">GAME OVER</h2>
-            <p className="font-pixel text-xs text-primary neon-text-cyan mb-3">
-              {score.toLocaleString()}
-            </p>
+            <p className="font-pixel text-xs text-primary neon-text-cyan mb-3">{score.toLocaleString()}</p>
             <GameOverLeaderboard gameId="pinball" score={score} />
             <button
               onClick={startGame}
