@@ -3,6 +3,7 @@ import gameSnake from "@/assets/game-snake.jpg";
 import gameInvaders from "@/assets/game-invaders.jpg";
 import gamePacman from "@/assets/game-pacman.jpg";
 import gameRacer from "@/assets/game-racer.jpg";
+import gamePinball from "@/assets/game-pinball.jpg";
 
 const games = [
   {
@@ -32,6 +33,13 @@ const games = [
     image: gameRacer,
     highScore: 0,
     slug: "super-kart",
+  },
+  {
+    title: "Neon Pinball",
+    description: "Retro-futuristic pinball with rock-solid physics and snappy flippers. Phase 1: pure feel.",
+    image: gamePinball,
+    highScore: 0,
+    slug: "neon-pinball",
   },
 ];
 
