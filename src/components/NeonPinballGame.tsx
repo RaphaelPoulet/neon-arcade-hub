@@ -31,7 +31,7 @@ const LANE_X = WIDTH - LANE_W / 2 - 4;      // center of lane
 const LANE_INNER_X = WIDTH - LANE_W - 8;    // inner wall x
 const LANE_TOP_Y = 140;
 const LANE_BOTTOM_Y = HEIGHT - 40;          // lane goes almost to bottom
-const LAUNCH_IMPULSE = 2200;                // instant upward velocity on Space
+const LAUNCH_IMPULSE = 3400;                // instant upward velocity on Space
 
 // --- Flippers ---
 const FLIPPER_LEN = 78;
@@ -382,18 +382,55 @@ const NeonPinballGame = () => {
     };
 
     const render = (ctx: CanvasRenderingContext2D) => {
-      ctx.fillStyle = C.bg;
+      // Deep obsidian base
+      ctx.fillStyle = "hsl(240, 30%, 3%)";
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
-      const g = ctx.createRadialGradient(WIDTH / 2, HEIGHT * 0.4, 40, WIDTH / 2, HEIGHT * 0.5, HEIGHT * 0.8);
-      g.addColorStop(0, "hsl(260, 60%, 14%)");
-      g.addColorStop(1, C.playfield);
+
+      // Rich radial gradient — obsidian core → midnight blue → deep neon purple edges
+      const g = ctx.createRadialGradient(WIDTH / 2, HEIGHT * 0.42, 30, WIDTH / 2, HEIGHT * 0.5, HEIGHT * 0.95);
+      g.addColorStop(0, "hsl(230, 55%, 9%)");
+      g.addColorStop(0.55, "hsl(245, 60%, 7%)");
+      g.addColorStop(1, "hsl(275, 70%, 5%)");
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-      ctx.strokeStyle = "hsla(190, 100%, 60%, 0.06)";
+      // Carbon-fiber weave texture (subtle diagonal hatch)
+      ctx.save();
+      ctx.globalAlpha = 0.05;
+      ctx.strokeStyle = "hsl(200, 100%, 70%)";
       ctx.lineWidth = 1;
-      for (let x = 0; x < WIDTH; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, HEIGHT); ctx.stroke(); }
-      for (let y = 0; y < HEIGHT; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WIDTH, y); ctx.stroke(); }
+      for (let i = -HEIGHT; i < WIDTH; i += 6) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + HEIGHT, HEIGHT); ctx.stroke();
+      }
+      ctx.globalAlpha = 0.035;
+      ctx.strokeStyle = "hsl(320, 100%, 70%)";
+      for (let i = 0; i < WIDTH + HEIGHT; i += 6) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i - HEIGHT, HEIGHT); ctx.stroke();
+      }
+      ctx.restore();
+
+      // Faint side-art glow columns (arcade cabinet silhouettes)
+      const sideL = ctx.createLinearGradient(0, 0, 60, 0);
+      sideL.addColorStop(0, "hsla(190, 100%, 55%, 0.18)");
+      sideL.addColorStop(1, "hsla(190, 100%, 55%, 0)");
+      ctx.fillStyle = sideL;
+      ctx.fillRect(0, 0, 60, HEIGHT);
+      const sideR = ctx.createLinearGradient(WIDTH, 0, WIDTH - 60, 0);
+      sideR.addColorStop(0, "hsla(320, 100%, 60%, 0.18)");
+      sideR.addColorStop(1, "hsla(320, 100%, 60%, 0)");
+      ctx.fillStyle = sideR;
+      ctx.fillRect(WIDTH - 60, 0, 60, HEIGHT);
+
+      // Translucent playfield inset — separates ball/bumpers from bg
+      ctx.fillStyle = "hsla(255, 45%, 8%, 0.55)";
+      ctx.fillRect(6, 6, WIDTH - 12, HEIGHT - 12);
+
+      // Dark vignette
+      const vg = ctx.createRadialGradient(WIDTH / 2, HEIGHT / 2, HEIGHT * 0.35, WIDTH / 2, HEIGHT / 2, HEIGHT * 0.72);
+      vg.addColorStop(0, "hsla(0, 0%, 0%, 0)");
+      vg.addColorStop(1, "hsla(0, 0%, 0%, 0.75)");
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
       // drain zone (only between pivots)
       ctx.fillStyle = C.drain;
