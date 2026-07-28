@@ -31,14 +31,14 @@ const LANE_X = WIDTH - LANE_W / 2 - 4;      // center of lane
 const LANE_INNER_X = WIDTH - LANE_W - 8;    // inner wall x
 const LANE_TOP_Y = 140;
 const LANE_BOTTOM_Y = HEIGHT - 40;          // lane goes almost to bottom
-const LAUNCH_IMPULSE = 1450;                // instant upward velocity on Space
+const LAUNCH_IMPULSE = 2200;                // instant upward velocity on Space
 
 // --- Flippers ---
 const FLIPPER_LEN = 78;
 const FLIPPER_W = 14;
 const PIVOT_Y = 700;
-const PIVOT_L_X = 170;
-const PIVOT_R_X = 300;
+const PIVOT_L_X = 140;
+const PIVOT_R_X = 330;
 const REST_ANGLE = (28 * Math.PI) / 180;
 const ACTIVE_ANGLE = (32 * Math.PI) / 180;
 const FLIPPER_UP_SPEED = 28;
