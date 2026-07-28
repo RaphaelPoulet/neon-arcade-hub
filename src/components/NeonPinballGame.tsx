@@ -260,13 +260,13 @@ const NeonPinballGame = () => {
 
     const collideSeg = (
       b: Ball, x1: number, y1: number, x2: number, y2: number,
-      restitution: number, extraVel?: { vx: number; vy: number }
+      restitution: number, extraVel?: { vx: number; vy: number }, halfW = 0
     ) => {
       const cp = segClosestPoint(b.x, b.y, x1, y1, x2, y2);
       const dx = b.x - cp.x;
       const dy = b.y - cp.y;
       const d2 = dx * dx + dy * dy;
-      const r = BALL_R;
+      const r = BALL_R + halfW;
       if (d2 > r * r) return false;
       const dist = Math.sqrt(d2) || 0.0001;
       const nx = dx / dist, ny = dy / dist;
