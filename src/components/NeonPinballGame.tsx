@@ -342,7 +342,7 @@ const NeonPinballGame = () => {
         b.x += b.vx * sdt;
         b.y += b.vy * sdt;
 
-        for (const w of WALLS) collideSeg(b, w.x1, w.y1, w.x2, w.y2, RESTITUTION);
+        for (const w of WALLS) collideSeg(b, w.x1, w.y1, w.x2, w.y2, RESTITUTION, undefined, w.halfW ?? 0);
 
         const { lx, ly, rx, ry } = flipperEndpoints();
         {
