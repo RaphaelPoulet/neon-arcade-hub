@@ -54,27 +54,41 @@ const BUMPERS_INIT: Bumper[] = [
 ];
 
 // --- Walls ---
-interface Wall { x1: number; y1: number; x2: number; y2: number; }
+interface Wall { x1: number; y1: number; x2: number; y2: number; halfW?: number; accent?: "cyan" | "magenta"; }
+const WALL_HALF = 7; // physical half-thickness for outer walls
+const INNER_HALF = 5;
 const WALLS: Wall[] = [
   // outer left
-  { x1: 0, y1: 0, x2: 0, y2: HEIGHT },
+  { x1: 0, y1: 0, x2: 0, y2: HEIGHT, halfW: WALL_HALF, accent: "cyan" },
   // outer right
-  { x1: WIDTH, y1: 0, x2: WIDTH, y2: HEIGHT },
+  { x1: WIDTH, y1: 0, x2: WIDTH, y2: HEIGHT, halfW: WALL_HALF, accent: "magenta" },
   // top arch
-  { x1: 0, y1: 120, x2: 90, y2: 40 },
-  { x1: 90, y1: 40, x2: WIDTH - 90, y2: 40 },
-  { x1: WIDTH - 90, y1: 40, x2: WIDTH, y2: 120 },
+  { x1: 0, y1: 120, x2: 90, y2: 40, halfW: WALL_HALF, accent: "cyan" },
+  { x1: 90, y1: 40, x2: WIDTH - 90, y2: 40, halfW: WALL_HALF, accent: "cyan" },
+  { x1: WIDTH - 90, y1: 40, x2: WIDTH, y2: 120, halfW: WALL_HALF, accent: "magenta" },
   // launcher inner wall (full lane, top to bottom)
-  { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y },
+  { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y, halfW: WALL_HALF, accent: "magenta" },
   // curved rail from lane top into playfield (one-way deflector)
-  { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: WIDTH - 90, y2: 80 },
+  { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: WIDTH - 90, y2: 80, halfW: WALL_HALF, accent: "magenta" },
   // bottom-left slope: from outer wall directly to left pivot (sealed)
-  { x1: 0, y1: HEIGHT - 160, x2: PIVOT_L_X, y2: PIVOT_Y },
+  { x1: 0, y1: HEIGHT - 160, x2: PIVOT_L_X, y2: PIVOT_Y, halfW: WALL_HALF, accent: "cyan" },
   // bottom-right slope: from launcher inner wall directly to right pivot (sealed)
-  { x1: LANE_INNER_X, y1: HEIGHT - 200, x2: PIVOT_R_X, y2: PIVOT_Y },
+  { x1: LANE_INNER_X, y1: HEIGHT - 200, x2: PIVOT_R_X, y2: PIVOT_Y, halfW: WALL_HALF, accent: "magenta" },
   // bottom floor pieces from outer walls up to slope start (side outlanes closed)
-  { x1: 0, y1: HEIGHT, x2: 0, y2: HEIGHT - 160 },
-  { x1: LANE_INNER_X, y1: HEIGHT - 200, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y },
+  { x1: 0, y1: HEIGHT, x2: 0, y2: HEIGHT - 160, halfW: WALL_HALF, accent: "cyan" },
+  { x1: LANE_INNER_X, y1: HEIGHT - 200, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y, halfW: WALL_HALF, accent: "magenta" },
+
+  // --- Internal guide walls ---
+  // Left slanted deflector (funnels toward left bumper)
+  { x1: 30, y1: 190, x2: 78, y2: 300, halfW: INNER_HALF, accent: "cyan" },
+  // Right slanted deflector (funnels toward right bumper)
+  { x1: 405, y1: 200, x2: 360, y2: 305, halfW: INNER_HALF, accent: "magenta" },
+  // Center chevron above middle bumper (inverted V)
+  { x1: 195, y1: 425, x2: 230, y2: 395, halfW: INNER_HALF, accent: "cyan" },
+  { x1: 230, y1: 395, x2: 265, y2: 425, halfW: INNER_HALF, accent: "magenta" },
+  // Short guide rails above flippers to prevent easy drain along walls
+  { x1: 60, y1: HEIGHT - 260, x2: 105, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "cyan" },
+  { x1: LANE_INNER_X - 20, y1: HEIGHT - 260, x2: LANE_INNER_X - 65, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "magenta" },
 ];
 
 // Drain zone: ONLY between the two flipper pivots
