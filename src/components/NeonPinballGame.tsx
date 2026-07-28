@@ -403,64 +403,79 @@ const NeonPinballGame = () => {
       ctx.fillStyle = "hsl(240, 30%, 3%)";
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-      // Rich radial gradient — obsidian core → midnight blue → deep neon purple edges
-      const g = ctx.createRadialGradient(WIDTH / 2, HEIGHT * 0.42, 30, WIDTH / 2, HEIGHT * 0.5, HEIGHT * 0.95);
-      g.addColorStop(0, "hsl(230, 55%, 9%)");
-      g.addColorStop(0.55, "hsl(245, 60%, 7%)");
-      g.addColorStop(1, "hsl(275, 70%, 5%)");
-      ctx.fillStyle = g;
+      // Rock guitarist stage background art
+      if (bgImg.complete && bgImg.naturalWidth > 0) {
+        ctx.drawImage(bgImg, 0, 0, WIDTH, HEIGHT);
+      }
+
+      // Purple wash + vignette to keep playfield readable
+      const wash = ctx.createRadialGradient(WIDTH / 2, HEIGHT * 0.55, 60, WIDTH / 2, HEIGHT / 2, HEIGHT * 0.85);
+      wash.addColorStop(0, "hsla(260, 60%, 8%, 0.55)");
+      wash.addColorStop(1, "hsla(275, 80%, 4%, 0.85)");
+      ctx.fillStyle = wash;
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-      // Carbon-fiber weave texture (subtle diagonal hatch)
-      ctx.save();
-      ctx.globalAlpha = 0.05;
-      ctx.strokeStyle = "hsl(200, 100%, 70%)";
-      ctx.lineWidth = 1;
-      for (let i = -HEIGHT; i < WIDTH; i += 6) {
-        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + HEIGHT, HEIGHT); ctx.stroke();
-      }
-      ctx.globalAlpha = 0.035;
-      ctx.strokeStyle = "hsl(320, 100%, 70%)";
-      for (let i = 0; i < WIDTH + HEIGHT; i += 6) {
-        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i - HEIGHT, HEIGHT); ctx.stroke();
-      }
-      ctx.restore();
-
-      // Faint side-art glow columns (arcade cabinet silhouettes)
+      // Faint side glow columns
       const sideL = ctx.createLinearGradient(0, 0, 60, 0);
-      sideL.addColorStop(0, "hsla(190, 100%, 55%, 0.18)");
+      sideL.addColorStop(0, "hsla(190, 100%, 55%, 0.22)");
       sideL.addColorStop(1, "hsla(190, 100%, 55%, 0)");
       ctx.fillStyle = sideL;
       ctx.fillRect(0, 0, 60, HEIGHT);
       const sideR = ctx.createLinearGradient(WIDTH, 0, WIDTH - 60, 0);
-      sideR.addColorStop(0, "hsla(320, 100%, 60%, 0.18)");
+      sideR.addColorStop(0, "hsla(320, 100%, 60%, 0.22)");
       sideR.addColorStop(1, "hsla(320, 100%, 60%, 0)");
       ctx.fillStyle = sideR;
       ctx.fillRect(WIDTH - 60, 0, 60, HEIGHT);
-
-      // Translucent playfield inset — separates ball/bumpers from bg
-      ctx.fillStyle = "hsla(255, 45%, 8%, 0.55)";
-      ctx.fillRect(6, 6, WIDTH - 12, HEIGHT - 12);
-
-      // Dark vignette
-      const vg = ctx.createRadialGradient(WIDTH / 2, HEIGHT / 2, HEIGHT * 0.35, WIDTH / 2, HEIGHT / 2, HEIGHT * 0.72);
-      vg.addColorStop(0, "hsla(0, 0%, 0%, 0)");
-      vg.addColorStop(1, "hsla(0, 0%, 0%, 0.75)");
-      ctx.fillStyle = vg;
-      ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
       // drain zone (only between pivots)
       ctx.fillStyle = C.drain;
       ctx.fillRect(DRAIN_X_MIN, DRAIN_Y - 4, DRAIN_X_MAX - DRAIN_X_MIN, HEIGHT - DRAIN_Y + 4);
 
-      // walls
-      ctx.shadowBlur = 12;
-      ctx.shadowColor = C.wallGlow;
-      ctx.strokeStyle = C.wall;
-      ctx.lineWidth = 4;
+      // Thick neon walls — draw glow, outer skin, inner core, chevron pattern
       ctx.lineCap = "round";
       for (const w of WALLS) {
+        const half = w.halfW ?? 4;
+        const thickness = half * 2;
+        const isMag = w.accent === "magenta";
+        const outer = isMag ? "hsl(320, 100%, 55%)" : "hsl(190, 100%, 55%)";
+        const glow = isMag ? "hsla(320, 100%, 60%, 0.9)" : "hsla(190, 100%, 60%, 0.9)";
+        const core = isMag ? "hsl(320, 100%, 88%)" : "hsl(190, 100%, 90%)";
+
+        // Outer glow halo
+        ctx.shadowBlur = 22;
+        ctx.shadowColor = glow;
+        ctx.strokeStyle = outer;
+        ctx.lineWidth = thickness;
         ctx.beginPath(); ctx.moveTo(w.x1, w.y1); ctx.lineTo(w.x2, w.y2); ctx.stroke();
+
+        // Inner bright core
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = core;
+        ctx.lineWidth = Math.max(2, thickness * 0.35);
+        ctx.beginPath(); ctx.moveTo(w.x1, w.y1); ctx.lineTo(w.x2, w.y2); ctx.stroke();
+
+        // Chevron pattern along thicker outer walls only
+        if (thickness >= 12) {
+          const dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+          const len = Math.hypot(dx, dy);
+          if (len > 30) {
+            const ux = dx / len, uy = dy / len;
+            const nx = -uy, ny = ux;
+            ctx.strokeStyle = isMag ? "hsla(320, 100%, 95%, 0.55)" : "hsla(190, 100%, 95%, 0.55)";
+            ctx.lineWidth = 1.2;
+            const step = 14;
+            const chev = half * 0.55;
+            for (let d = 10; d < len - 10; d += step) {
+              const cx = w.x1 + ux * d;
+              const cy = w.y1 + uy * d;
+              ctx.beginPath();
+              ctx.moveTo(cx - ux * 3 + nx * chev, cy - uy * 3 + ny * chev);
+              ctx.lineTo(cx + nx * (chev * 0.2), cy + ny * (chev * 0.2));
+              ctx.lineTo(cx + ux * 3 + nx * chev, cy + uy * 3 + ny * chev);
+              ctx.stroke();
+            }
+          }
+        }
       }
       ctx.shadowBlur = 0;
 
