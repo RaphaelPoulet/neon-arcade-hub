@@ -238,6 +238,8 @@ const NeonPinballGame = () => {
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
     let last = performance.now();
+    const bgImg = new Image();
+    bgImg.src = pinballBg;
 
     const frame = (now: number) => {
       rafRef.current = requestAnimationFrame(frame);
