@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useCallback } from "react";
 import { Settings } from "lucide-react";
 import { toast } from "sonner";
 import GameOverLeaderboard from "@/components/GameOverLeaderboard";
+import pinballBg from "@/assets/pinball-bg.jpg";
 
 // ============================================================
 // NEON PINBALL — Phase 1.1: sealed walls, instant launch, bumpers
@@ -53,27 +54,41 @@ const BUMPERS_INIT: Bumper[] = [
 ];
 
 // --- Walls ---
-interface Wall { x1: number; y1: number; x2: number; y2: number; }
+interface Wall { x1: number; y1: number; x2: number; y2: number; halfW?: number; accent?: "cyan" | "magenta"; }
+const WALL_HALF = 7; // physical half-thickness for outer walls
+const INNER_HALF = 5;
 const WALLS: Wall[] = [
   // outer left
-  { x1: 0, y1: 0, x2: 0, y2: HEIGHT },
+  { x1: 0, y1: 0, x2: 0, y2: HEIGHT, halfW: WALL_HALF, accent: "cyan" },
   // outer right
-  { x1: WIDTH, y1: 0, x2: WIDTH, y2: HEIGHT },
+  { x1: WIDTH, y1: 0, x2: WIDTH, y2: HEIGHT, halfW: WALL_HALF, accent: "magenta" },
   // top arch
-  { x1: 0, y1: 120, x2: 90, y2: 40 },
-  { x1: 90, y1: 40, x2: WIDTH - 90, y2: 40 },
-  { x1: WIDTH - 90, y1: 40, x2: WIDTH, y2: 120 },
+  { x1: 0, y1: 120, x2: 90, y2: 40, halfW: WALL_HALF, accent: "cyan" },
+  { x1: 90, y1: 40, x2: WIDTH - 90, y2: 40, halfW: WALL_HALF, accent: "cyan" },
+  { x1: WIDTH - 90, y1: 40, x2: WIDTH, y2: 120, halfW: WALL_HALF, accent: "magenta" },
   // launcher inner wall (full lane, top to bottom)
-  { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y },
+  { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y, halfW: WALL_HALF, accent: "magenta" },
   // curved rail from lane top into playfield (one-way deflector)
-  { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: WIDTH - 90, y2: 80 },
+  { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: WIDTH - 90, y2: 80, halfW: WALL_HALF, accent: "magenta" },
   // bottom-left slope: from outer wall directly to left pivot (sealed)
-  { x1: 0, y1: HEIGHT - 160, x2: PIVOT_L_X, y2: PIVOT_Y },
+  { x1: 0, y1: HEIGHT - 160, x2: PIVOT_L_X, y2: PIVOT_Y, halfW: WALL_HALF, accent: "cyan" },
   // bottom-right slope: from launcher inner wall directly to right pivot (sealed)
-  { x1: LANE_INNER_X, y1: HEIGHT - 200, x2: PIVOT_R_X, y2: PIVOT_Y },
+  { x1: LANE_INNER_X, y1: HEIGHT - 200, x2: PIVOT_R_X, y2: PIVOT_Y, halfW: WALL_HALF, accent: "magenta" },
   // bottom floor pieces from outer walls up to slope start (side outlanes closed)
-  { x1: 0, y1: HEIGHT, x2: 0, y2: HEIGHT - 160 },
-  { x1: LANE_INNER_X, y1: HEIGHT - 200, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y },
+  { x1: 0, y1: HEIGHT, x2: 0, y2: HEIGHT - 160, halfW: WALL_HALF, accent: "cyan" },
+  { x1: LANE_INNER_X, y1: HEIGHT - 200, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y, halfW: WALL_HALF, accent: "magenta" },
+
+  // --- Internal guide walls ---
+  // Left slanted deflector (funnels toward left bumper)
+  { x1: 30, y1: 190, x2: 78, y2: 300, halfW: INNER_HALF, accent: "cyan" },
+  // Right slanted deflector (funnels toward right bumper)
+  { x1: 405, y1: 200, x2: 360, y2: 305, halfW: INNER_HALF, accent: "magenta" },
+  // Center chevron above middle bumper (inverted V)
+  { x1: 195, y1: 425, x2: 230, y2: 395, halfW: INNER_HALF, accent: "cyan" },
+  { x1: 230, y1: 395, x2: 265, y2: 425, halfW: INNER_HALF, accent: "magenta" },
+  // Short guide rails above flippers to prevent easy drain along walls
+  { x1: 60, y1: HEIGHT - 260, x2: 105, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "cyan" },
+  { x1: LANE_INNER_X - 20, y1: HEIGHT - 260, x2: LANE_INNER_X - 65, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "magenta" },
 ];
 
 // Drain zone: ONLY between the two flipper pivots
@@ -223,6 +238,8 @@ const NeonPinballGame = () => {
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
     let last = performance.now();
+    const bgImg = new Image();
+    bgImg.src = pinballBg;
 
     const frame = (now: number) => {
       rafRef.current = requestAnimationFrame(frame);
@@ -245,13 +262,13 @@ const NeonPinballGame = () => {
 
     const collideSeg = (
       b: Ball, x1: number, y1: number, x2: number, y2: number,
-      restitution: number, extraVel?: { vx: number; vy: number }
+      restitution: number, extraVel?: { vx: number; vy: number }, halfW = 0
     ) => {
       const cp = segClosestPoint(b.x, b.y, x1, y1, x2, y2);
       const dx = b.x - cp.x;
       const dy = b.y - cp.y;
       const d2 = dx * dx + dy * dy;
-      const r = BALL_R;
+      const r = BALL_R + halfW;
       if (d2 > r * r) return false;
       const dist = Math.sqrt(d2) || 0.0001;
       const nx = dx / dist, ny = dy / dist;
@@ -327,7 +344,7 @@ const NeonPinballGame = () => {
         b.x += b.vx * sdt;
         b.y += b.vy * sdt;
 
-        for (const w of WALLS) collideSeg(b, w.x1, w.y1, w.x2, w.y2, RESTITUTION);
+        for (const w of WALLS) collideSeg(b, w.x1, w.y1, w.x2, w.y2, RESTITUTION, undefined, w.halfW ?? 0);
 
         const { lx, ly, rx, ry } = flipperEndpoints();
         {
@@ -386,64 +403,79 @@ const NeonPinballGame = () => {
       ctx.fillStyle = "hsl(240, 30%, 3%)";
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-      // Rich radial gradient — obsidian core → midnight blue → deep neon purple edges
-      const g = ctx.createRadialGradient(WIDTH / 2, HEIGHT * 0.42, 30, WIDTH / 2, HEIGHT * 0.5, HEIGHT * 0.95);
-      g.addColorStop(0, "hsl(230, 55%, 9%)");
-      g.addColorStop(0.55, "hsl(245, 60%, 7%)");
-      g.addColorStop(1, "hsl(275, 70%, 5%)");
-      ctx.fillStyle = g;
+      // Rock guitarist stage background art
+      if (bgImg.complete && bgImg.naturalWidth > 0) {
+        ctx.drawImage(bgImg, 0, 0, WIDTH, HEIGHT);
+      }
+
+      // Purple wash + vignette to keep playfield readable
+      const wash = ctx.createRadialGradient(WIDTH / 2, HEIGHT * 0.55, 60, WIDTH / 2, HEIGHT / 2, HEIGHT * 0.85);
+      wash.addColorStop(0, "hsla(260, 60%, 8%, 0.55)");
+      wash.addColorStop(1, "hsla(275, 80%, 4%, 0.85)");
+      ctx.fillStyle = wash;
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-      // Carbon-fiber weave texture (subtle diagonal hatch)
-      ctx.save();
-      ctx.globalAlpha = 0.05;
-      ctx.strokeStyle = "hsl(200, 100%, 70%)";
-      ctx.lineWidth = 1;
-      for (let i = -HEIGHT; i < WIDTH; i += 6) {
-        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + HEIGHT, HEIGHT); ctx.stroke();
-      }
-      ctx.globalAlpha = 0.035;
-      ctx.strokeStyle = "hsl(320, 100%, 70%)";
-      for (let i = 0; i < WIDTH + HEIGHT; i += 6) {
-        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i - HEIGHT, HEIGHT); ctx.stroke();
-      }
-      ctx.restore();
-
-      // Faint side-art glow columns (arcade cabinet silhouettes)
+      // Faint side glow columns
       const sideL = ctx.createLinearGradient(0, 0, 60, 0);
-      sideL.addColorStop(0, "hsla(190, 100%, 55%, 0.18)");
+      sideL.addColorStop(0, "hsla(190, 100%, 55%, 0.22)");
       sideL.addColorStop(1, "hsla(190, 100%, 55%, 0)");
       ctx.fillStyle = sideL;
       ctx.fillRect(0, 0, 60, HEIGHT);
       const sideR = ctx.createLinearGradient(WIDTH, 0, WIDTH - 60, 0);
-      sideR.addColorStop(0, "hsla(320, 100%, 60%, 0.18)");
+      sideR.addColorStop(0, "hsla(320, 100%, 60%, 0.22)");
       sideR.addColorStop(1, "hsla(320, 100%, 60%, 0)");
       ctx.fillStyle = sideR;
       ctx.fillRect(WIDTH - 60, 0, 60, HEIGHT);
-
-      // Translucent playfield inset — separates ball/bumpers from bg
-      ctx.fillStyle = "hsla(255, 45%, 8%, 0.55)";
-      ctx.fillRect(6, 6, WIDTH - 12, HEIGHT - 12);
-
-      // Dark vignette
-      const vg = ctx.createRadialGradient(WIDTH / 2, HEIGHT / 2, HEIGHT * 0.35, WIDTH / 2, HEIGHT / 2, HEIGHT * 0.72);
-      vg.addColorStop(0, "hsla(0, 0%, 0%, 0)");
-      vg.addColorStop(1, "hsla(0, 0%, 0%, 0.75)");
-      ctx.fillStyle = vg;
-      ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
       // drain zone (only between pivots)
       ctx.fillStyle = C.drain;
       ctx.fillRect(DRAIN_X_MIN, DRAIN_Y - 4, DRAIN_X_MAX - DRAIN_X_MIN, HEIGHT - DRAIN_Y + 4);
 
-      // walls
-      ctx.shadowBlur = 12;
-      ctx.shadowColor = C.wallGlow;
-      ctx.strokeStyle = C.wall;
-      ctx.lineWidth = 4;
+      // Thick neon walls — draw glow, outer skin, inner core, chevron pattern
       ctx.lineCap = "round";
       for (const w of WALLS) {
+        const half = w.halfW ?? 4;
+        const thickness = half * 2;
+        const isMag = w.accent === "magenta";
+        const outer = isMag ? "hsl(320, 100%, 55%)" : "hsl(190, 100%, 55%)";
+        const glow = isMag ? "hsla(320, 100%, 60%, 0.9)" : "hsla(190, 100%, 60%, 0.9)";
+        const core = isMag ? "hsl(320, 100%, 88%)" : "hsl(190, 100%, 90%)";
+
+        // Outer glow halo
+        ctx.shadowBlur = 22;
+        ctx.shadowColor = glow;
+        ctx.strokeStyle = outer;
+        ctx.lineWidth = thickness;
         ctx.beginPath(); ctx.moveTo(w.x1, w.y1); ctx.lineTo(w.x2, w.y2); ctx.stroke();
+
+        // Inner bright core
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = core;
+        ctx.lineWidth = Math.max(2, thickness * 0.35);
+        ctx.beginPath(); ctx.moveTo(w.x1, w.y1); ctx.lineTo(w.x2, w.y2); ctx.stroke();
+
+        // Chevron pattern along thicker outer walls only
+        if (thickness >= 12) {
+          const dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+          const len = Math.hypot(dx, dy);
+          if (len > 30) {
+            const ux = dx / len, uy = dy / len;
+            const nx = -uy, ny = ux;
+            ctx.strokeStyle = isMag ? "hsla(320, 100%, 95%, 0.55)" : "hsla(190, 100%, 95%, 0.55)";
+            ctx.lineWidth = 1.2;
+            const step = 14;
+            const chev = half * 0.55;
+            for (let d = 10; d < len - 10; d += step) {
+              const cx = w.x1 + ux * d;
+              const cy = w.y1 + uy * d;
+              ctx.beginPath();
+              ctx.moveTo(cx - ux * 3 + nx * chev, cy - uy * 3 + ny * chev);
+              ctx.lineTo(cx + nx * (chev * 0.2), cy + ny * (chev * 0.2));
+              ctx.lineTo(cx + ux * 3 + nx * chev, cy + uy * 3 + ny * chev);
+              ctx.stroke();
+            }
+          }
+        }
       }
       ctx.shadowBlur = 0;
 
