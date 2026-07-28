@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useCallback } from "react";
 import { Settings } from "lucide-react";
 import { toast } from "sonner";
 import GameOverLeaderboard from "@/components/GameOverLeaderboard";
+import pinballBg from "@/assets/pinball-bg.jpg";
 
 // ============================================================
 // NEON PINBALL — Phase 1.1: sealed walls, instant launch, bumpers
