@@ -32,7 +32,7 @@ const LANE_X = WIDTH - LANE_W / 2 - 4;      // center of lane
 const LANE_INNER_X = WIDTH - LANE_W - 8;    // inner wall x
 const LANE_TOP_Y = 140;
 const LANE_BOTTOM_Y = HEIGHT - 40;          // lane goes almost to bottom
-const LAUNCH_IMPULSE = 3400;                // instant upward velocity on Space
+const LAUNCH_IMPULSE = 5100;                // instant upward velocity on Space (+50%)
 
 // --- Flippers ---
 const FLIPPER_LEN = 78;
