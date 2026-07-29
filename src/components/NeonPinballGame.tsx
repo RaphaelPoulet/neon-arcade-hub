@@ -32,7 +32,7 @@ const LANE_X = WIDTH - LANE_W / 2 - 4;      // center of lane
 const LANE_INNER_X = WIDTH - LANE_W - 8;    // inner wall x
 const LANE_TOP_Y = 140;
 const LANE_BOTTOM_Y = HEIGHT - 40;          // lane goes almost to bottom
-const LAUNCH_IMPULSE = 3400;                // instant upward velocity on Space
+const LAUNCH_IMPULSE = 5100;                // instant upward velocity on Space (+50%)
 
 // --- Flippers ---
 const FLIPPER_LEN = 78;
@@ -431,68 +431,136 @@ const NeonPinballGame = () => {
       ctx.fillStyle = C.drain;
       ctx.fillRect(DRAIN_X_MIN, DRAIN_Y - 4, DRAIN_X_MAX - DRAIN_X_MIN, HEIGHT - DRAIN_Y + 4);
 
-      // Thick neon walls — draw glow, outer skin, inner core, chevron pattern
+      // Thick sculpted neon walls — drop shadow, beveled body, specular highlight, chevron accents
       ctx.lineCap = "round";
       for (const w of WALLS) {
         const half = w.halfW ?? 4;
         const thickness = half * 2;
         const isMag = w.accent === "magenta";
-        const outer = isMag ? "hsl(320, 100%, 55%)" : "hsl(190, 100%, 55%)";
-        const glow = isMag ? "hsla(320, 100%, 60%, 0.9)" : "hsla(190, 100%, 60%, 0.9)";
-        const core = isMag ? "hsl(320, 100%, 88%)" : "hsl(190, 100%, 90%)";
+        const hue = isMag ? 320 : 190;
+        const dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len, uy = dy / len;
+        const nx = -uy, ny = ux;
 
-        // Outer glow halo
-        ctx.shadowBlur = 22;
-        ctx.shadowColor = glow;
-        ctx.strokeStyle = outer;
+        // Drop shadow beneath the wall (offset down-right)
+        ctx.save();
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "rgba(0,0,0,0.85)";
+        ctx.shadowOffsetX = 3; ctx.shadowOffsetY = 4;
+        ctx.strokeStyle = "rgba(0,0,0,0.9)";
         ctx.lineWidth = thickness;
         ctx.beginPath(); ctx.moveTo(w.x1, w.y1); ctx.lineTo(w.x2, w.y2); ctx.stroke();
+        ctx.restore();
 
-        // Inner bright core
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = core;
-        ctx.lineWidth = Math.max(2, thickness * 0.35);
+        // Outer neon glow halo
+        ctx.save();
+        ctx.shadowBlur = 26;
+        ctx.shadowColor = `hsla(${hue}, 100%, 60%, 0.95)`;
+        ctx.strokeStyle = `hsl(${hue}, 100%, 45%)`;
+        ctx.lineWidth = thickness;
+        ctx.beginPath(); ctx.moveTo(w.x1, w.y1); ctx.lineTo(w.x2, w.y2); ctx.stroke();
+        ctx.restore();
+
+        // Sculpted body gradient across thickness (dark base → bright top)
+        const gx1 = (w.x1 + w.x2) / 2 - nx * half;
+        const gy1 = (w.y1 + w.y2) / 2 - ny * half;
+        const gx2 = (w.x1 + w.x2) / 2 + nx * half;
+        const gy2 = (w.y1 + w.y2) / 2 + ny * half;
+        const bevel = ctx.createLinearGradient(gx1, gy1, gx2, gy2);
+        bevel.addColorStop(0, `hsl(${hue}, 90%, 78%)`);
+        bevel.addColorStop(0.45, `hsl(${hue}, 95%, 52%)`);
+        bevel.addColorStop(1, `hsl(${hue}, 85%, 22%)`);
+        ctx.strokeStyle = bevel;
+        ctx.lineWidth = thickness * 0.82;
         ctx.beginPath(); ctx.moveTo(w.x1, w.y1); ctx.lineTo(w.x2, w.y2); ctx.stroke();
 
-        // Chevron pattern along thicker outer walls only
-        if (thickness >= 12) {
-          const dx = w.x2 - w.x1, dy = w.y2 - w.y1;
-          const len = Math.hypot(dx, dy);
-          if (len > 30) {
-            const ux = dx / len, uy = dy / len;
-            const nx = -uy, ny = ux;
-            ctx.strokeStyle = isMag ? "hsla(320, 100%, 95%, 0.55)" : "hsla(190, 100%, 95%, 0.55)";
-            ctx.lineWidth = 1.2;
-            const step = 14;
-            const chev = half * 0.55;
-            for (let d = 10; d < len - 10; d += step) {
-              const cx = w.x1 + ux * d;
-              const cy = w.y1 + uy * d;
-              ctx.beginPath();
-              ctx.moveTo(cx - ux * 3 + nx * chev, cy - uy * 3 + ny * chev);
-              ctx.lineTo(cx + nx * (chev * 0.2), cy + ny * (chev * 0.2));
-              ctx.lineTo(cx + ux * 3 + nx * chev, cy + uy * 3 + ny * chev);
-              ctx.stroke();
-            }
+        // Specular top highlight (thin bright ridge offset toward light)
+        ctx.strokeStyle = `hsla(${hue}, 100%, 96%, 0.9)`;
+        ctx.lineWidth = Math.max(1.4, thickness * 0.18);
+        ctx.beginPath();
+        ctx.moveTo(w.x1 - nx * half * 0.45, w.y1 - ny * half * 0.45);
+        ctx.lineTo(w.x2 - nx * half * 0.45, w.y2 - ny * half * 0.45);
+        ctx.stroke();
+
+        // Inner bright core along the centerline
+        ctx.strokeStyle = `hsl(${hue}, 100%, 92%)`;
+        ctx.lineWidth = Math.max(1.2, thickness * 0.14);
+        ctx.beginPath(); ctx.moveTo(w.x1, w.y1); ctx.lineTo(w.x2, w.y2); ctx.stroke();
+
+        // Chevron / dot accents along longer walls
+        if (thickness >= 10 && len > 40) {
+          ctx.strokeStyle = `hsla(${hue}, 100%, 96%, 0.55)`;
+          ctx.lineWidth = 1.1;
+          const stepD = 16;
+          const chev = half * 0.5;
+          for (let d = 12; d < len - 12; d += stepD) {
+            const cx = w.x1 + ux * d;
+            const cy = w.y1 + uy * d;
+            ctx.beginPath();
+            ctx.moveTo(cx - ux * 3 + nx * chev, cy - uy * 3 + ny * chev);
+            ctx.lineTo(cx + nx * (chev * 0.15), cy + ny * (chev * 0.15));
+            ctx.lineTo(cx + ux * 3 + nx * chev, cy + uy * 3 + ny * chev);
+            ctx.stroke();
           }
         }
       }
-      ctx.shadowBlur = 0;
+      ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
 
-      // bumpers
+      // Bumpers — sculpted 3D domes with metallic base, glowing ring, polished shell
       for (const bm of bumpersRef.current) {
         const flashing = bm.flash > 0;
-        ctx.shadowBlur = flashing ? 40 : 20;
+
+        // 1. Drop shadow on playfield
+        ctx.save();
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = "rgba(0,0,0,0.75)";
+        ctx.shadowOffsetX = 3; ctx.shadowOffsetY = 5;
+        ctx.fillStyle = "rgba(0,0,0,0.85)";
+        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r + 2, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+
+        // 2. Metallic beveled base ring
+        const baseR = bm.r + 4;
+        const baseGrad = ctx.createRadialGradient(bm.x - 3, bm.y - 3, 2, bm.x, bm.y, baseR);
+        baseGrad.addColorStop(0, "hsl(240, 15%, 45%)");
+        baseGrad.addColorStop(0.6, "hsl(240, 20%, 25%)");
+        baseGrad.addColorStop(1, "hsl(240, 25%, 10%)");
+        ctx.fillStyle = baseGrad;
+        ctx.beginPath(); ctx.arc(bm.x, bm.y, baseR, 0, Math.PI * 2); ctx.fill();
+
+        // 3. Glowing internal light ring
+        ctx.save();
+        ctx.shadowBlur = flashing ? 42 : 22;
         ctx.shadowColor = flashing ? C.bumperFlash : C.bumperGlow;
-        const grad = ctx.createRadialGradient(bm.x - 4, bm.y - 4, 2, bm.x, bm.y, bm.r);
-        grad.addColorStop(0, flashing ? C.bumperFlash : "hsl(300, 100%, 85%)");
-        grad.addColorStop(1, C.bumper);
-        ctx.fillStyle = grad;
-        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r, 0, Math.PI * 2); ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = "hsla(0,0%,100%,0.6)";
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r - 4, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = flashing ? C.bumperFlash : "hsl(300, 100%, 70%)";
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r - 1, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+
+        // 4. Polished dome shell (top-lit gradient)
+        const domeGrad = ctx.createRadialGradient(bm.x - bm.r * 0.4, bm.y - bm.r * 0.5, 1, bm.x, bm.y, bm.r);
+        domeGrad.addColorStop(0, flashing ? "hsl(60, 100%, 96%)" : "hsl(300, 100%, 92%)");
+        domeGrad.addColorStop(0.55, flashing ? "hsl(50, 100%, 75%)" : "hsl(290, 100%, 68%)");
+        domeGrad.addColorStop(1, "hsl(275, 85%, 32%)");
+        ctx.fillStyle = domeGrad;
+        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r - 3, 0, Math.PI * 2); ctx.fill();
+
+        // 5. Specular highlight (glossy top-left)
+        const spec = ctx.createRadialGradient(
+          bm.x - bm.r * 0.4, bm.y - bm.r * 0.5, 0.5,
+          bm.x - bm.r * 0.3, bm.y - bm.r * 0.35, bm.r * 0.55
+        );
+        spec.addColorStop(0, "rgba(255,255,255,0.95)");
+        spec.addColorStop(0.5, "rgba(255,255,255,0.25)");
+        spec.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = spec;
+        ctx.beginPath(); ctx.arc(bm.x - bm.r * 0.3, bm.y - bm.r * 0.35, bm.r * 0.55, 0, Math.PI * 2); ctx.fill();
+
+        // 6. Thin rim highlight around dome edge
+        ctx.strokeStyle = "hsla(0,0%,100%,0.35)";
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r - 3, 0, Math.PI * 2); ctx.stroke();
       }
 
       // launcher chute hint
