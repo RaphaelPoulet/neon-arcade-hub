@@ -68,8 +68,8 @@ const WALLS: Wall[] = [
   { x1: WIDTH - 90, y1: 40, x2: WIDTH, y2: 120, halfW: WALL_HALF, accent: "magenta" },
   // launcher inner wall (full lane, top to bottom)
   { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y, halfW: WALL_HALF, accent: "magenta" },
-  // curved rail from lane top into playfield (one-way deflector)
-  { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: WIDTH - 90, y2: 80, halfW: WALL_HALF, accent: "magenta" },
+  // curved rail from lane top into playfield (widened ejection channel)
+  { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: WIDTH - 170, y2: 70, halfW: WALL_HALF, accent: "magenta" },
   // bottom-left slope: from outer wall directly to left pivot (sealed)
   { x1: 0, y1: HEIGHT - 160, x2: PIVOT_L_X, y2: PIVOT_Y, halfW: WALL_HALF, accent: "cyan" },
   // bottom-right slope: from launcher inner wall directly to right pivot (sealed)
