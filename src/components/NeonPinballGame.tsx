@@ -27,12 +27,12 @@ const SUBSTEPS = 6;
 const BALL_R = 11;
 
 // --- Launcher lane ---
-const LANE_W = 30;
+const LANE_W = 44;
 const LANE_X = WIDTH - LANE_W / 2 - 4;      // center of lane
-const LANE_INNER_X = WIDTH - LANE_W - 8;    // inner wall x
-const LANE_TOP_Y = 140;
+const LANE_INNER_X = WIDTH - LANE_W - 8;    // inner wall x (widened lane)
+const LANE_TOP_Y = 170;                     // curve starts lower for a longer, wider ejection arc
 const LANE_BOTTOM_Y = HEIGHT - 40;          // lane goes almost to bottom
-const LAUNCH_IMPULSE = 5100;                // instant upward velocity on Space (+50%)
+const LAUNCH_IMPULSE = 7500;                // instant upward velocity on Space (drastically boosted)
 
 // --- Flippers ---
 const FLIPPER_LEN = 78;
@@ -68,8 +68,8 @@ const WALLS: Wall[] = [
   { x1: WIDTH - 90, y1: 40, x2: WIDTH, y2: 120, halfW: WALL_HALF, accent: "magenta" },
   // launcher inner wall (full lane, top to bottom)
   { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y, halfW: WALL_HALF, accent: "magenta" },
-  // curved rail from lane top into playfield (one-way deflector)
-  { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: WIDTH - 90, y2: 80, halfW: WALL_HALF, accent: "magenta" },
+  // curved rail from lane top into playfield (widened ejection channel)
+  { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: WIDTH - 170, y2: 70, halfW: WALL_HALF, accent: "magenta" },
   // bottom-left slope: from outer wall directly to left pivot (sealed)
   { x1: 0, y1: HEIGHT - 160, x2: PIVOT_L_X, y2: PIVOT_Y, halfW: WALL_HALF, accent: "cyan" },
   // bottom-right slope: from launcher inner wall directly to right pivot (sealed)
