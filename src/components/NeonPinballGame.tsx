@@ -27,12 +27,12 @@ const SUBSTEPS = 6;
 const BALL_R = 11;
 
 // --- Launcher lane ---
-const LANE_W = 30;
+const LANE_W = 44;
 const LANE_X = WIDTH - LANE_W / 2 - 4;      // center of lane
-const LANE_INNER_X = WIDTH - LANE_W - 8;    // inner wall x
-const LANE_TOP_Y = 140;
+const LANE_INNER_X = WIDTH - LANE_W - 8;    // inner wall x (widened lane)
+const LANE_TOP_Y = 170;                     // curve starts lower for a longer, wider ejection arc
 const LANE_BOTTOM_Y = HEIGHT - 40;          // lane goes almost to bottom
-const LAUNCH_IMPULSE = 5100;                // instant upward velocity on Space (+50%)
+const LAUNCH_IMPULSE = 7500;                // instant upward velocity on Space (drastically boosted)
 
 // --- Flippers ---
 const FLIPPER_LEN = 78;
