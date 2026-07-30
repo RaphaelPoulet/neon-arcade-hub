@@ -21,10 +21,11 @@ const FLIPPER_RESTITUTION = 0.55;
 const BUMPER_RESTITUTION = 1.15;
 const FRICTION = 0.9955; // playfield rolling friction (per sub-step) — tames hyper-speed
 const MAX_SPEED = 3400;
-const SUBSTEPS = 6;
+const SUBSTEPS = 10; // denser sub-stepping: no tunneling through flippers/islands
 
-// --- Ball ---
-const BALL_R = 11;
+// --- Ball (solid, volumetric) ---
+const BALL_R = 12.5;
+
 
 // --- Launcher lane ---
 const LANE_W = 44;
@@ -55,13 +56,42 @@ const ACTIVE_ANGLE = (32 * Math.PI) / 180;
 const FLIPPER_UP_SPEED = 28;
 const FLIPPER_DOWN_SPEED = 14;
 
-// --- Bumpers ---
-interface Bumper { x: number; y: number; r: number; flash: number; }
-const BUMPERS_INIT: Bumper[] = [
-  { x: 140, y: 230, r: 26, flash: 0 },
-  { x: 320, y: 200, r: 26, flash: 0 },
-  { x: 230, y: 340, r: 28, flash: 0 },
+// --- Solid organic islands (replace bumpers + internal guides) ---
+interface Island {
+  x: number; y: number;
+  pts: { x: number; y: number }[];  // closed polygon outline (world coords)
+  flash: number;
+}
+const ISLAND_HALF = 3; // extra collision padding so the ball never clips the sculpted edge
+
+// Builds a rounded, distorted "pebble": irregular radii + undulating edge.
+function makeIsland(x: number, y: number, baseR: number, radii: number[], rot: number): Island {
+  const n = radii.length;
+  const pts: { x: number; y: number }[] = [];
+  const SUB = 10; // interpolated samples per lobe => smooth organic outline
+  for (let i = 0; i < n * SUB; i++) {
+    const f = i / SUB;
+    const i0 = Math.floor(f) % n;
+    const i1 = (i0 + 1) % n;
+    const t = f - Math.floor(f);
+    const s = t * t * (3 - 2 * t); // smoothstep between lobe radii
+    const r = baseR * (radii[i0] * (1 - s) + radii[i1] * s);
+    const a = rot + (i / (n * SUB)) * Math.PI * 2;
+    const undulate = 1 + 0.035 * Math.sin(a * 7 + rot * 3);
+    pts.push({ x: x + Math.cos(a) * r * undulate, y: y + Math.sin(a) * r * undulate });
+  }
+  return { x, y, pts, flash: 0 };
+}
+
+const ISLANDS_INIT: Island[] = [
+  // upper-left rounded triangle-ish pebble
+  makeIsland(138, 268, 54, [1.05, 0.72, 1.0, 0.62, 0.95], 0.4),
+  // upper-right smaller sculpted shard
+  makeIsland(338, 232, 46, [0.95, 1.08, 0.66, 1.0, 0.7, 0.9], -0.6),
+  // large central island — defines the rebound channels above the flippers
+  makeIsland(232, 440, 62, [1.1, 0.68, 1.02, 0.7, 0.98, 0.64], 1.1),
 ];
+
 
 // --- Walls ---
 interface Wall { x1: number; y1: number; x2: number; y2: number; halfW?: number; accent?: "cyan" | "magenta"; }
@@ -86,18 +116,10 @@ const WALLS: Wall[] = [
   { x1: 0, y1: HEIGHT, x2: 0, y2: HEIGHT - 160, halfW: WALL_HALF, accent: "cyan" },
   { x1: LANE_INNER_X, y1: HEIGHT - 200, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y, halfW: WALL_HALF, accent: "magenta" },
 
-  // --- Internal guide walls ---
-  // Left slanted deflector (funnels toward left bumper)
-  { x1: 30, y1: 190, x2: 78, y2: 300, halfW: INNER_HALF, accent: "cyan" },
-  // Right slanted deflector (funnels toward right bumper)
-  { x1: 405, y1: 200, x2: 360, y2: 305, halfW: INNER_HALF, accent: "magenta" },
-  // Center chevron above middle bumper (inverted V)
-  { x1: 195, y1: 425, x2: 230, y2: 395, halfW: INNER_HALF, accent: "cyan" },
-  { x1: 230, y1: 395, x2: 265, y2: 425, halfW: INNER_HALF, accent: "magenta" },
-  // Short guide rails above flippers to prevent easy drain along walls
-  { x1: 60, y1: HEIGHT - 260, x2: 105, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "cyan" },
-  { x1: LANE_INNER_X - 20, y1: HEIGHT - 260, x2: LANE_INNER_X - 65, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "magenta" },
+  // Internal guide walls removed — replaced by the three sculpted islands.
 ];
+void INNER_HALF;
+
 
 // Drain zone: ONLY between the two flipper pivots
 const DRAIN_Y = HEIGHT - 10;
@@ -171,7 +193,7 @@ const NeonPinballGame = () => {
   });
 
   const ballRef = useRef<Ball>({ x: LANE_X, y: LANE_BOTTOM_Y - BALL_R - 4, vx: 0, vy: 0, alive: false });
-  const bumpersRef = useRef<Bumper[]>(BUMPERS_INIT.map(b => ({ ...b })));
+  const islandsRef = useRef<Island[]>(ISLANDS_INIT.map(i => ({ ...i, flash: 0 })));
   const gateOpenRef = useRef(0); // >0 = shutters swung open
   const trailRef = useRef<{ x: number; y: number }[]>([]);
 
@@ -232,7 +254,7 @@ const NeonPinballGame = () => {
     ballNumRef.current = 1;
     setScore(0);
     setBallNum(1);
-    bumpersRef.current = BUMPERS_INIT.map(b => ({ ...b }));
+    islandsRef.current = ISLANDS_INIT.map(i => ({ ...i, flash: 0 }));
     resetBallToLauncher();
   }, [resetBallToLauncher]);
   useEffect(() => { startGameRef.current = startGame; }, [startGame]);
@@ -297,27 +319,29 @@ const NeonPinballGame = () => {
       return false;
     };
 
-    const collideBumper = (b: Ball, bm: Bumper) => {
-      const dx = b.x - bm.x, dy = b.y - bm.y;
-      const rSum = BALL_R + bm.r;
-      const d2 = dx * dx + dy * dy;
-      if (d2 > rSum * rSum) return false;
-      const dist = Math.sqrt(d2) || 0.0001;
-      const nx = dx / dist, ny = dy / dist;
-      b.x = bm.x + nx * rSum;
-      b.y = bm.y + ny * rSum;
-      const vn = b.vx * nx + b.vy * ny;
-      if (vn < 0) {
-        const j = -(1 + BUMPER_RESTITUTION) * vn;
-        b.vx += j * nx; b.vy += j * ny;
-        // extra kick
-        b.vx += nx * 120; b.vy += ny * 120;
-        bm.flash = 0.25;
-        scoreRef.current += 100;
-        return true;
+    // Solid island collision: swept against every edge of the sculpted outline.
+    const collideIsland = (b: Ball, isl: Island) => {
+      // broad phase
+      if (Math.hypot(b.x - isl.x, b.y - isl.y) > 90 + BALL_R) return false;
+      let hit = false;
+      const pts = isl.pts;
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i], q = pts[(i + 1) % pts.length];
+        if (collideSeg(b, p.x, p.y, q.x, q.y, BUMPER_RESTITUTION, undefined, ISLAND_HALF)) {
+          hit = true;
+        }
       }
-      return false;
+      if (hit) {
+        // push slightly away from the island core so the ball never rests inside
+        const dx = b.x - isl.x, dy = b.y - isl.y;
+        const d = Math.hypot(dx, dy) || 1;
+        b.vx += (dx / d) * 90; b.vy += (dy / d) * 90;
+        isl.flash = 0.22;
+        scoreRef.current += 100;
+      }
+      return hit;
     };
+
 
     const step = (dt: number) => {
       const updateFlip = (f: { angle: number; target: number; omega: number }) => {
@@ -331,8 +355,8 @@ const NeonPinballGame = () => {
       updateFlip(leftFlipRef.current);
       updateFlip(rightFlipRef.current);
 
-      // decay bumper flashes
-      for (const bm of bumpersRef.current) if (bm.flash > 0) bm.flash = Math.max(0, bm.flash - dt);
+      // decay island flashes
+      for (const isl of islandsRef.current) if (isl.flash > 0) isl.flash = Math.max(0, isl.flash - dt);
       if (gateOpenRef.current > 0) gateOpenRef.current = Math.max(0, gateOpenRef.current - dt);
 
       if (stateRef.current !== "playing" && stateRef.current !== "ready") return;
@@ -372,7 +396,7 @@ const NeonPinballGame = () => {
           const cp = segClosestPoint(b.x, b.y, PIVOT_L_X, PIVOT_Y, lx, ly);
           const w = leftFlipRef.current.omega;
           const rX = cp.x - PIVOT_L_X, rY = cp.y - PIVOT_Y;
-          if (collideSeg(b, PIVOT_L_X, PIVOT_Y, lx, ly, FLIPPER_RESTITUTION, { vx: w * rY, vy: -w * rX })) {
+          if (collideSeg(b, PIVOT_L_X, PIVOT_Y, lx, ly, FLIPPER_RESTITUTION, { vx: w * rY, vy: -w * rX }, FLIPPER_W / 2)) {
             scoreRef.current += 20;
           }
         }
@@ -380,13 +404,13 @@ const NeonPinballGame = () => {
           const cp = segClosestPoint(b.x, b.y, PIVOT_R_X, PIVOT_Y, rx, ry);
           const w = rightFlipRef.current.omega;
           const rrX = cp.x - PIVOT_R_X, rrY = cp.y - PIVOT_Y;
-          if (collideSeg(b, PIVOT_R_X, PIVOT_Y, rx, ry, FLIPPER_RESTITUTION, { vx: -w * rrY, vy: w * rrX })) {
+          if (collideSeg(b, PIVOT_R_X, PIVOT_Y, rx, ry, FLIPPER_RESTITUTION, { vx: -w * rrY, vy: w * rrX }, FLIPPER_W / 2)) {
             scoreRef.current += 20;
           }
           void cp;
         }
 
-        for (const bm of bumpersRef.current) collideBumper(b, bm);
+        for (const isl of islandsRef.current) collideIsland(b, isl);
 
         // drain — only between flipper pivots
         if (b.y > DRAIN_Y && b.x > DRAIN_X_MIN && b.x < DRAIN_X_MAX) {
@@ -528,61 +552,84 @@ const NeonPinballGame = () => {
       }
       ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
 
-      // Bumpers — sculpted 3D domes with metallic base, glowing ring, polished shell
-      for (const bm of bumpersRef.current) {
-        const flashing = bm.flash > 0;
+      // Sculpted organic islands — cyan volumetric body with a magenta core light
+      for (const isl of islandsRef.current) {
+        const flashing = isl.flash > 0;
+        const pts = isl.pts;
+        const path = new Path2D();
+        path.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) path.lineTo(pts[i].x, pts[i].y);
+        path.closePath();
 
-        // 1. Drop shadow on playfield
+        // 1. Cast shadow on the playfield
         ctx.save();
-        ctx.shadowBlur = 14;
-        ctx.shadowColor = "rgba(0,0,0,0.75)";
-        ctx.shadowOffsetX = 3; ctx.shadowOffsetY = 5;
-        ctx.fillStyle = "rgba(0,0,0,0.85)";
-        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r + 2, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = "rgba(0,0,0,0.8)";
+        ctx.shadowOffsetX = 4; ctx.shadowOffsetY = 6;
+        ctx.fillStyle = "rgba(0,0,0,0.9)";
+        ctx.fill(path);
         ctx.restore();
 
-        // 2. Metallic beveled base ring
-        const baseR = bm.r + 4;
-        const baseGrad = ctx.createRadialGradient(bm.x - 3, bm.y - 3, 2, bm.x, bm.y, baseR);
-        baseGrad.addColorStop(0, "hsl(240, 15%, 45%)");
-        baseGrad.addColorStop(0.6, "hsl(240, 20%, 25%)");
-        baseGrad.addColorStop(1, "hsl(240, 25%, 10%)");
-        ctx.fillStyle = baseGrad;
-        ctx.beginPath(); ctx.arc(bm.x, bm.y, baseR, 0, Math.PI * 2); ctx.fill();
-
-        // 3. Glowing internal light ring
+        // 2. Outer neon cyan halo
         ctx.save();
-        ctx.shadowBlur = flashing ? 42 : 22;
-        ctx.shadowColor = flashing ? C.bumperFlash : C.bumperGlow;
-        ctx.strokeStyle = flashing ? C.bumperFlash : "hsl(300, 100%, 70%)";
-        ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r - 1, 0, Math.PI * 2); ctx.stroke();
+        ctx.shadowBlur = flashing ? 42 : 26;
+        ctx.shadowColor = flashing ? "hsla(320,100%,70%,0.95)" : "hsla(190,100%,60%,0.9)";
+        ctx.strokeStyle = flashing ? "hsl(320, 100%, 72%)" : "hsl(190, 100%, 52%)";
+        ctx.lineWidth = 6;
+        ctx.lineJoin = "round";
+        ctx.stroke(path);
         ctx.restore();
 
-        // 4. Polished dome shell (top-lit gradient)
-        const domeGrad = ctx.createRadialGradient(bm.x - bm.r * 0.4, bm.y - bm.r * 0.5, 1, bm.x, bm.y, bm.r);
-        domeGrad.addColorStop(0, flashing ? "hsl(60, 100%, 96%)" : "hsl(300, 100%, 92%)");
-        domeGrad.addColorStop(0.55, flashing ? "hsl(50, 100%, 75%)" : "hsl(290, 100%, 68%)");
-        domeGrad.addColorStop(1, "hsl(275, 85%, 32%)");
-        ctx.fillStyle = domeGrad;
-        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r - 3, 0, Math.PI * 2); ctx.fill();
-
-        // 5. Specular highlight (glossy top-left)
-        const spec = ctx.createRadialGradient(
-          bm.x - bm.r * 0.4, bm.y - bm.r * 0.5, 0.5,
-          bm.x - bm.r * 0.3, bm.y - bm.r * 0.35, bm.r * 0.55
+        // 3. Volumetric cyan body (top-lit)
+        const body = ctx.createRadialGradient(
+          isl.x - 22, isl.y - 28, 4,
+          isl.x, isl.y, 78
         );
-        spec.addColorStop(0, "rgba(255,255,255,0.95)");
-        spec.addColorStop(0.5, "rgba(255,255,255,0.25)");
+        body.addColorStop(0, "hsl(188, 100%, 74%)");
+        body.addColorStop(0.42, "hsl(192, 95%, 46%)");
+        body.addColorStop(0.78, "hsl(198, 90%, 24%)");
+        body.addColorStop(1, "hsl(210, 80%, 12%)");
+        ctx.fillStyle = body;
+        ctx.fill(path);
+
+        // 4. Magenta core light bleeding from inside
+        ctx.save();
+        ctx.clip(path);
+        const core = ctx.createRadialGradient(isl.x, isl.y, 2, isl.x, isl.y, 58);
+        core.addColorStop(0, flashing ? "hsla(320, 100%, 92%, 0.98)" : "hsla(320, 100%, 78%, 0.9)");
+        core.addColorStop(0.45, "hsla(322, 100%, 58%, 0.5)");
+        core.addColorStop(1, "hsla(320, 100%, 50%, 0)");
+        ctx.fillStyle = core;
+        ctx.fillRect(isl.x - 100, isl.y - 100, 200, 200);
+
+        // 4b. Inner beveled shading along the rim (depth)
+        ctx.shadowBlur = 16;
+        ctx.shadowColor = "rgba(0,0,0,0.65)";
+        ctx.strokeStyle = "rgba(0,0,0,0.5)";
+        ctx.lineWidth = 10;
+        ctx.stroke(path);
+        ctx.restore();
+
+        // 5. Polished rim + specular ridge
+        ctx.strokeStyle = "hsla(185, 100%, 95%, 0.85)";
+        ctx.lineWidth = 1.8;
+        ctx.lineJoin = "round";
+        ctx.stroke(path);
+
+        ctx.save();
+        ctx.clip(path);
+        const spec = ctx.createRadialGradient(
+          isl.x - 20, isl.y - 26, 1,
+          isl.x - 16, isl.y - 20, 46
+        );
+        spec.addColorStop(0, "rgba(255,255,255,0.55)");
+        spec.addColorStop(0.55, "rgba(255,255,255,0.12)");
         spec.addColorStop(1, "rgba(255,255,255,0)");
         ctx.fillStyle = spec;
-        ctx.beginPath(); ctx.arc(bm.x - bm.r * 0.3, bm.y - bm.r * 0.35, bm.r * 0.55, 0, Math.PI * 2); ctx.fill();
-
-        // 6. Thin rim highlight around dome edge
-        ctx.strokeStyle = "hsla(0,0%,100%,0.35)";
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r - 3, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillRect(isl.x - 100, isl.y - 100, 200, 200);
+        ctx.restore();
       }
+      ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
 
       // --- one-way anti-drain gate: 3 yellow shutters, 45° angled, high in the lane ---
       {
