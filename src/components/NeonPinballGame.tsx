@@ -355,8 +355,8 @@ const NeonPinballGame = () => {
       updateFlip(leftFlipRef.current);
       updateFlip(rightFlipRef.current);
 
-      // decay bumper flashes
-      for (const bm of bumpersRef.current) if (bm.flash > 0) bm.flash = Math.max(0, bm.flash - dt);
+      // decay island flashes
+      for (const isl of islandsRef.current) if (isl.flash > 0) isl.flash = Math.max(0, isl.flash - dt);
       if (gateOpenRef.current > 0) gateOpenRef.current = Math.max(0, gateOpenRef.current - dt);
 
       if (stateRef.current !== "playing" && stateRef.current !== "ready") return;
