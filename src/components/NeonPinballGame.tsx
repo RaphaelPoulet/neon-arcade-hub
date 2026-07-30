@@ -116,18 +116,10 @@ const WALLS: Wall[] = [
   { x1: 0, y1: HEIGHT, x2: 0, y2: HEIGHT - 160, halfW: WALL_HALF, accent: "cyan" },
   { x1: LANE_INNER_X, y1: HEIGHT - 200, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y, halfW: WALL_HALF, accent: "magenta" },
 
-  // --- Internal guide walls ---
-  // Left slanted deflector (funnels toward left bumper)
-  { x1: 30, y1: 190, x2: 78, y2: 300, halfW: INNER_HALF, accent: "cyan" },
-  // Right slanted deflector (funnels toward right bumper)
-  { x1: 405, y1: 200, x2: 360, y2: 305, halfW: INNER_HALF, accent: "magenta" },
-  // Center chevron above middle bumper (inverted V)
-  { x1: 195, y1: 425, x2: 230, y2: 395, halfW: INNER_HALF, accent: "cyan" },
-  { x1: 230, y1: 395, x2: 265, y2: 425, halfW: INNER_HALF, accent: "magenta" },
-  // Short guide rails above flippers to prevent easy drain along walls
-  { x1: 60, y1: HEIGHT - 260, x2: 105, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "cyan" },
-  { x1: LANE_INNER_X - 20, y1: HEIGHT - 260, x2: LANE_INNER_X - 65, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "magenta" },
+  // Internal guide walls removed — replaced by the three sculpted islands.
 ];
+void INNER_HALF;
+
 
 // Drain zone: ONLY between the two flipper pivots
 const DRAIN_Y = HEIGHT - 10;
