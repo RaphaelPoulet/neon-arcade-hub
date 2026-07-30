@@ -359,11 +359,11 @@ const NeonPinballGame = () => {
 
         // One-way gate: blocks the ball from rolling back down the ramp.
         // Swings open while the ball travels upward through it.
-        if (b.x > GATE_X1 - BALL_R && b.x < GATE_X2 + BALL_R) {
-          if (b.vy < 0 && Math.abs(b.y - GATE_Y) < 60) gateOpenRef.current = GATE_OPEN_TIME;
+        if (b.vy < 0 && Math.hypot(b.x - GATE_CX, b.y - GATE_CY) < 70) {
+          gateOpenRef.current = GATE_OPEN_TIME;
         }
         if (gateOpenRef.current <= 0 && b.vy > 0) {
-          collideSeg(b, GATE_X1, GATE_Y, GATE_X2, GATE_Y, 0.35, undefined, GATE_HALF);
+          collideSeg(b, GATE_AX, GATE_AY, GATE_BX, GATE_BY, 0.35, undefined, GATE_HALF);
         }
 
         const { lx, ly, rx, ry } = flipperEndpoints();
