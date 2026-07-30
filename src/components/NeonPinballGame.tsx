@@ -254,7 +254,7 @@ const NeonPinballGame = () => {
     ballNumRef.current = 1;
     setScore(0);
     setBallNum(1);
-    bumpersRef.current = BUMPERS_INIT.map(b => ({ ...b }));
+    islandsRef.current = ISLANDS_INIT.map(i => ({ ...i, flash: 0 }));
     resetBallToLauncher();
   }, [resetBallToLauncher]);
   useEffect(() => { startGameRef.current = startGame; }, [startGame]);
