@@ -16,10 +16,10 @@ const HEIGHT = 800;
 
 // --- Physics ---
 const GRAVITY = 1400;
-const RESTITUTION = 0.75;
+const RESTITUTION = 0.62;
 const FLIPPER_RESTITUTION = 0.55;
-const BUMPER_RESTITUTION = 1.4;
-const FRICTION = 0.999;
+const BUMPER_RESTITUTION = 1.15;
+const FRICTION = 0.9955; // playfield rolling friction (per sub-step) — tames hyper-speed
 const MAX_SPEED = 2400;
 const SUBSTEPS = 6;
 
@@ -32,7 +32,14 @@ const LANE_X = WIDTH - LANE_W / 2 - 4;      // center of lane
 const LANE_INNER_X = WIDTH - LANE_W - 8;    // inner wall x (widened lane)
 const LANE_TOP_Y = 170;                     // curve starts lower for a longer, wider ejection arc
 const LANE_BOTTOM_Y = HEIGHT - 40;          // lane goes almost to bottom
-const LAUNCH_IMPULSE = 7500;                // instant upward velocity on Space (drastically boosted)
+const LAUNCH_IMPULSE = 7500;                // instant upward velocity on Space (unchanged)
+
+// --- One-way anti-drain gate (top of the launch ramp) ---
+const GATE_Y = LANE_TOP_Y + 6;              // gate sits just above the lane's inner wall
+const GATE_X1 = LANE_INNER_X;
+const GATE_X2 = WIDTH;
+const GATE_HALF = 6;
+const GATE_OPEN_TIME = 0.35;                // seconds the shutters stay open after the ball pushes through
 
 // --- Flippers ---
 const FLIPPER_LEN = 78;
@@ -162,6 +169,7 @@ const NeonPinballGame = () => {
 
   const ballRef = useRef<Ball>({ x: LANE_X, y: LANE_BOTTOM_Y - BALL_R - 4, vx: 0, vy: 0, alive: false });
   const bumpersRef = useRef<Bumper[]>(BUMPERS_INIT.map(b => ({ ...b })));
+  const gateOpenRef = useRef(0); // >0 = shutters swung open
 
   const leftFlipRef = useRef({ angle: -REST_ANGLE, target: -REST_ANGLE, omega: 0 });
   const rightFlipRef = useRef({ angle: -REST_ANGLE, target: -REST_ANGLE, omega: 0 });
@@ -182,6 +190,7 @@ const NeonPinballGame = () => {
           if (a === "launch") {
             if (stateRef.current === "ready" && ballRef.current.alive) {
               ballRef.current.vy = -LAUNCH_IMPULSE;
+              gateOpenRef.current = GATE_OPEN_TIME;
               ballRef.current.vx = 0;
               setGameState("playing");
             }
@@ -320,6 +329,7 @@ const NeonPinballGame = () => {
 
       // decay bumper flashes
       for (const bm of bumpersRef.current) if (bm.flash > 0) bm.flash = Math.max(0, bm.flash - dt);
+      if (gateOpenRef.current > 0) gateOpenRef.current = Math.max(0, gateOpenRef.current - dt);
 
       if (stateRef.current !== "playing" && stateRef.current !== "ready") return;
       const b = ballRef.current;
@@ -343,6 +353,15 @@ const NeonPinballGame = () => {
         b.y += b.vy * sdt;
 
         for (const w of WALLS) collideSeg(b, w.x1, w.y1, w.x2, w.y2, RESTITUTION, undefined, w.halfW ?? 0);
+
+        // One-way gate: blocks the ball from rolling back down the ramp.
+        // Swings open while the ball travels upward through it.
+        if (b.x > GATE_X1 - BALL_R && b.x < GATE_X2 + BALL_R) {
+          if (b.vy < 0 && Math.abs(b.y - GATE_Y) < 60) gateOpenRef.current = GATE_OPEN_TIME;
+        }
+        if (gateOpenRef.current <= 0 && b.vy > 0) {
+          collideSeg(b, GATE_X1, GATE_Y, GATE_X2, GATE_Y, 0.35, undefined, GATE_HALF);
+        }
 
         const { lx, ly, rx, ry } = flipperEndpoints();
         {
@@ -559,6 +578,47 @@ const NeonPinballGame = () => {
         ctx.strokeStyle = "hsla(0,0%,100%,0.35)";
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r - 3, 0, Math.PI * 2); ctx.stroke();
+      }
+
+      // --- one-way anti-drain gate (metal shutters in the magenta wall) ---
+      {
+        const open = gateOpenRef.current > 0;
+        const swing = open ? 1 : 0;
+        const gw = GATE_X2 - GATE_X1;
+        const bars = 4;
+        ctx.save();
+        ctx.shadowColor = "hsla(320, 100%, 60%, 0.9)";
+        ctx.shadowBlur = open ? 8 : 20;
+        for (let i = 0; i < bars; i++) {
+          const bx = GATE_X1 + 3 + (gw - 6) * (i / bars);
+          const bw = (gw - 6) / bars - 3;
+          ctx.save();
+          ctx.translate(bx + bw / 2, GATE_Y);
+          ctx.rotate(swing * -1.15);
+          const grad = ctx.createLinearGradient(0, -GATE_HALF, 0, GATE_HALF);
+          grad.addColorStop(0, "hsl(320, 90%, 72%)");
+          grad.addColorStop(0.45, "hsl(320, 80%, 46%)");
+          grad.addColorStop(1, "hsl(320, 70%, 24%)");
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.roundRect(-bw / 2, -GATE_HALF, bw, GATE_HALF * 2, 3);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = "hsla(0,0%,100%,0.45)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(-bw / 2 + 2, -GATE_HALF + 1.5);
+          ctx.lineTo(bw / 2 - 2, -GATE_HALF + 1.5);
+          ctx.stroke();
+          ctx.restore();
+        }
+        // pivot studs
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "hsl(50, 100%, 78%)";
+        for (const px of [GATE_X1 + 3, GATE_X2 - 3]) {
+          ctx.beginPath(); ctx.arc(px, GATE_Y, 2.5, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
       }
 
       // launcher chute hint
