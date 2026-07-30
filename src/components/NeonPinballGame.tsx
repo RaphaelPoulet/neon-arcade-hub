@@ -396,7 +396,7 @@ const NeonPinballGame = () => {
           const cp = segClosestPoint(b.x, b.y, PIVOT_L_X, PIVOT_Y, lx, ly);
           const w = leftFlipRef.current.omega;
           const rX = cp.x - PIVOT_L_X, rY = cp.y - PIVOT_Y;
-          if (collideSeg(b, PIVOT_L_X, PIVOT_Y, lx, ly, FLIPPER_RESTITUTION, { vx: w * rY, vy: -w * rX })) {
+          if (collideSeg(b, PIVOT_L_X, PIVOT_Y, lx, ly, FLIPPER_RESTITUTION, { vx: w * rY, vy: -w * rX }, FLIPPER_W / 2)) {
             scoreRef.current += 20;
           }
         }
@@ -404,13 +404,13 @@ const NeonPinballGame = () => {
           const cp = segClosestPoint(b.x, b.y, PIVOT_R_X, PIVOT_Y, rx, ry);
           const w = rightFlipRef.current.omega;
           const rrX = cp.x - PIVOT_R_X, rrY = cp.y - PIVOT_Y;
-          if (collideSeg(b, PIVOT_R_X, PIVOT_Y, rx, ry, FLIPPER_RESTITUTION, { vx: -w * rrY, vy: w * rrX })) {
+          if (collideSeg(b, PIVOT_R_X, PIVOT_Y, rx, ry, FLIPPER_RESTITUTION, { vx: -w * rrY, vy: w * rrX }, FLIPPER_W / 2)) {
             scoreRef.current += 20;
           }
           void cp;
         }
 
-        for (const bm of bumpersRef.current) collideBumper(b, bm);
+        for (const isl of islandsRef.current) collideIsland(b, isl);
 
         // drain — only between flipper pivots
         if (b.y > DRAIN_Y && b.x > DRAIN_X_MIN && b.x < DRAIN_X_MAX) {
