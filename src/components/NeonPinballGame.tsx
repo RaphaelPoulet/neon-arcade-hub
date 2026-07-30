@@ -20,7 +20,7 @@ const RESTITUTION = 0.62;
 const FLIPPER_RESTITUTION = 0.55;
 const BUMPER_RESTITUTION = 1.15;
 const FRICTION = 0.9955; // playfield rolling friction (per sub-step) — tames hyper-speed
-const MAX_SPEED = 2400;
+const MAX_SPEED = 3400;
 const SUBSTEPS = 6;
 
 // --- Ball ---
@@ -32,12 +32,15 @@ const LANE_X = WIDTH - LANE_W / 2 - 4;      // center of lane
 const LANE_INNER_X = WIDTH - LANE_W - 8;    // inner wall x (widened lane)
 const LANE_TOP_Y = 170;                     // curve starts lower for a longer, wider ejection arc
 const LANE_BOTTOM_Y = HEIGHT - 40;          // lane goes almost to bottom
-const LAUNCH_IMPULSE = 7500;                // instant upward velocity on Space (unchanged)
+const LAUNCH_IMPULSE = 11000;               // instant upward velocity on Space (hyper-speed plunger)
 
-// --- One-way anti-drain gate (top of the launch ramp) ---
-const GATE_Y = LANE_TOP_Y + 6;              // gate sits just above the lane's inner wall
-const GATE_X1 = LANE_INNER_X;
-const GATE_X2 = WIDTH;
+// --- One-way anti-drain gate (high, 45° angled, just before the upper-right turn) ---
+const GATE_AX = LANE_INNER_X;               // lower-left end (on the magenta inner wall)
+const GATE_AY = LANE_TOP_Y + 1;
+const GATE_BX = WIDTH;                      // upper-right end (on the outer wall)
+const GATE_BY = LANE_TOP_Y - 51;            // 45° tilt up-and-right
+const GATE_CX = (GATE_AX + GATE_BX) / 2;
+const GATE_CY = (GATE_AY + GATE_BY) / 2;
 const GATE_HALF = 6;
 const GATE_OPEN_TIME = 0.35;                // seconds the shutters stay open after the ball pushes through
 
@@ -170,6 +173,7 @@ const NeonPinballGame = () => {
   const ballRef = useRef<Ball>({ x: LANE_X, y: LANE_BOTTOM_Y - BALL_R - 4, vx: 0, vy: 0, alive: false });
   const bumpersRef = useRef<Bumper[]>(BUMPERS_INIT.map(b => ({ ...b })));
   const gateOpenRef = useRef(0); // >0 = shutters swung open
+  const trailRef = useRef<{ x: number; y: number }[]>([]);
 
   const leftFlipRef = useRef({ angle: -REST_ANGLE, target: -REST_ANGLE, omega: 0 });
   const rightFlipRef = useRef({ angle: -REST_ANGLE, target: -REST_ANGLE, omega: 0 });
@@ -356,11 +360,11 @@ const NeonPinballGame = () => {
 
         // One-way gate: blocks the ball from rolling back down the ramp.
         // Swings open while the ball travels upward through it.
-        if (b.x > GATE_X1 - BALL_R && b.x < GATE_X2 + BALL_R) {
-          if (b.vy < 0 && Math.abs(b.y - GATE_Y) < 60) gateOpenRef.current = GATE_OPEN_TIME;
+        if (b.vy < 0 && Math.hypot(b.x - GATE_CX, b.y - GATE_CY) < 70) {
+          gateOpenRef.current = GATE_OPEN_TIME;
         }
         if (gateOpenRef.current <= 0 && b.vy > 0) {
-          collideSeg(b, GATE_X1, GATE_Y, GATE_X2, GATE_Y, 0.35, undefined, GATE_HALF);
+          collideSeg(b, GATE_AX, GATE_AY, GATE_BX, GATE_BY, 0.35, undefined, GATE_HALF);
         }
 
         const { lx, ly, rx, ry } = flipperEndpoints();
@@ -580,31 +584,36 @@ const NeonPinballGame = () => {
         ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r - 3, 0, Math.PI * 2); ctx.stroke();
       }
 
-      // --- one-way anti-drain gate (metal shutters in the magenta wall) ---
+      // --- one-way anti-drain gate: 3 yellow shutters, 45° angled, high in the lane ---
       {
         const open = gateOpenRef.current > 0;
         const swing = open ? 1 : 0;
-        const gw = GATE_X2 - GATE_X1;
-        const bars = 4;
+        const gdx = GATE_BX - GATE_AX, gdy = GATE_BY - GATE_AY;
+        const glen = Math.hypot(gdx, gdy);
+        const gang = Math.atan2(gdy, gdx);
+        const bars = 3;
         ctx.save();
-        ctx.shadowColor = "hsla(320, 100%, 60%, 0.9)";
-        ctx.shadowBlur = open ? 8 : 20;
+        ctx.translate(GATE_AX, GATE_AY);
+        ctx.rotate(gang);
+        ctx.shadowColor = "hsla(50, 100%, 60%, 0.9)";
+        ctx.shadowBlur = open ? 8 : 22;
+        const seg = (glen - 6) / bars;
         for (let i = 0; i < bars; i++) {
-          const bx = GATE_X1 + 3 + (gw - 6) * (i / bars);
-          const bw = (gw - 6) / bars - 3;
+          const bx = 3 + seg * i;
+          const bw = seg - 3;
           ctx.save();
-          ctx.translate(bx + bw / 2, GATE_Y);
+          ctx.translate(bx + bw / 2, 0);
           ctx.rotate(swing * -1.15);
           const grad = ctx.createLinearGradient(0, -GATE_HALF, 0, GATE_HALF);
-          grad.addColorStop(0, "hsl(320, 90%, 72%)");
-          grad.addColorStop(0.45, "hsl(320, 80%, 46%)");
-          grad.addColorStop(1, "hsl(320, 70%, 24%)");
+          grad.addColorStop(0, "hsl(52, 100%, 82%)");
+          grad.addColorStop(0.45, "hsl(48, 100%, 55%)");
+          grad.addColorStop(1, "hsl(42, 90%, 32%)");
           ctx.fillStyle = grad;
           ctx.beginPath();
           ctx.roundRect(-bw / 2, -GATE_HALF, bw, GATE_HALF * 2, 3);
           ctx.fill();
           ctx.shadowBlur = 0;
-          ctx.strokeStyle = "hsla(0,0%,100%,0.45)";
+          ctx.strokeStyle = "hsla(0,0%,100%,0.55)";
           ctx.lineWidth = 1;
           ctx.beginPath();
           ctx.moveTo(-bw / 2 + 2, -GATE_HALF + 1.5);
@@ -612,14 +621,15 @@ const NeonPinballGame = () => {
           ctx.stroke();
           ctx.restore();
         }
-        // pivot studs
+        // pivot studs at both ends of the angled gate
         ctx.shadowBlur = 0;
-        ctx.fillStyle = "hsl(50, 100%, 78%)";
-        for (const px of [GATE_X1 + 3, GATE_X2 - 3]) {
-          ctx.beginPath(); ctx.arc(px, GATE_Y, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "hsl(50, 100%, 85%)";
+        for (const px of [3, glen - 3]) {
+          ctx.beginPath(); ctx.arc(px, 0, 2.8, 0, Math.PI * 2); ctx.fill();
         }
         ctx.restore();
       }
+
 
       // launcher chute hint
       ctx.strokeStyle = "hsla(50, 100%, 60%, 0.4)";
@@ -653,10 +663,33 @@ const NeonPinballGame = () => {
       drawFlipper(PIVOT_L_X, PIVOT_Y, leftFlipRef.current.angle, false);
       drawFlipper(PIVOT_R_X, PIVOT_Y, rightFlipRef.current.angle, true);
 
-      // ball
+      // ball + hyper-speed motion blur trail
       const b = ballRef.current;
       if (b.alive) {
-        ctx.shadowBlur = 20;
+        const speed = Math.hypot(b.vx, b.vy);
+        const trail = trailRef.current;
+        trail.push({ x: b.x, y: b.y });
+        const maxTrail = Math.round(6 + Math.min(1, speed / 1600) * 34); // longer trail the faster it flies
+        while (trail.length > maxTrail) trail.shift();
+
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        for (let i = 0; i < trail.length; i++) {
+          const t = i / trail.length;           // 0 = oldest
+          const p = trail[i];
+          const r = BALL_R * (0.25 + 0.75 * t);
+          const a = 0.05 + 0.5 * t * t;
+          ctx.shadowBlur = 26 * t;
+          ctx.shadowColor = C.ballGlow;
+          const tg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+          tg.addColorStop(0, `hsla(320, 100%, 82%, ${a})`);
+          tg.addColorStop(1, "hsla(320, 100%, 55%, 0)");
+          ctx.fillStyle = tg;
+          ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+
+        ctx.shadowBlur = 20 + Math.min(1, speed / 1600) * 30;
         ctx.shadowColor = C.ballGlow;
         const bg = ctx.createRadialGradient(b.x - 3, b.y - 3, 1, b.x, b.y, BALL_R);
         bg.addColorStop(0, "hsl(60, 100%, 90%)");
@@ -664,6 +697,8 @@ const NeonPinballGame = () => {
         ctx.fillStyle = bg;
         ctx.beginPath(); ctx.arc(b.x, b.y, BALL_R, 0, Math.PI * 2); ctx.fill();
         ctx.shadowBlur = 0;
+      } else {
+        trailRef.current.length = 0;
       }
     };
 
