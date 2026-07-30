@@ -552,61 +552,84 @@ const NeonPinballGame = () => {
       }
       ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
 
-      // Bumpers — sculpted 3D domes with metallic base, glowing ring, polished shell
-      for (const bm of bumpersRef.current) {
-        const flashing = bm.flash > 0;
+      // Sculpted organic islands — cyan volumetric body with a magenta core light
+      for (const isl of islandsRef.current) {
+        const flashing = isl.flash > 0;
+        const pts = isl.pts;
+        const path = new Path2D();
+        path.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) path.lineTo(pts[i].x, pts[i].y);
+        path.closePath();
 
-        // 1. Drop shadow on playfield
+        // 1. Cast shadow on the playfield
         ctx.save();
-        ctx.shadowBlur = 14;
-        ctx.shadowColor = "rgba(0,0,0,0.75)";
-        ctx.shadowOffsetX = 3; ctx.shadowOffsetY = 5;
-        ctx.fillStyle = "rgba(0,0,0,0.85)";
-        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r + 2, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = "rgba(0,0,0,0.8)";
+        ctx.shadowOffsetX = 4; ctx.shadowOffsetY = 6;
+        ctx.fillStyle = "rgba(0,0,0,0.9)";
+        ctx.fill(path);
         ctx.restore();
 
-        // 2. Metallic beveled base ring
-        const baseR = bm.r + 4;
-        const baseGrad = ctx.createRadialGradient(bm.x - 3, bm.y - 3, 2, bm.x, bm.y, baseR);
-        baseGrad.addColorStop(0, "hsl(240, 15%, 45%)");
-        baseGrad.addColorStop(0.6, "hsl(240, 20%, 25%)");
-        baseGrad.addColorStop(1, "hsl(240, 25%, 10%)");
-        ctx.fillStyle = baseGrad;
-        ctx.beginPath(); ctx.arc(bm.x, bm.y, baseR, 0, Math.PI * 2); ctx.fill();
-
-        // 3. Glowing internal light ring
+        // 2. Outer neon cyan halo
         ctx.save();
-        ctx.shadowBlur = flashing ? 42 : 22;
-        ctx.shadowColor = flashing ? C.bumperFlash : C.bumperGlow;
-        ctx.strokeStyle = flashing ? C.bumperFlash : "hsl(300, 100%, 70%)";
-        ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r - 1, 0, Math.PI * 2); ctx.stroke();
+        ctx.shadowBlur = flashing ? 42 : 26;
+        ctx.shadowColor = flashing ? "hsla(320,100%,70%,0.95)" : "hsla(190,100%,60%,0.9)";
+        ctx.strokeStyle = flashing ? "hsl(320, 100%, 72%)" : "hsl(190, 100%, 52%)";
+        ctx.lineWidth = 6;
+        ctx.lineJoin = "round";
+        ctx.stroke(path);
         ctx.restore();
 
-        // 4. Polished dome shell (top-lit gradient)
-        const domeGrad = ctx.createRadialGradient(bm.x - bm.r * 0.4, bm.y - bm.r * 0.5, 1, bm.x, bm.y, bm.r);
-        domeGrad.addColorStop(0, flashing ? "hsl(60, 100%, 96%)" : "hsl(300, 100%, 92%)");
-        domeGrad.addColorStop(0.55, flashing ? "hsl(50, 100%, 75%)" : "hsl(290, 100%, 68%)");
-        domeGrad.addColorStop(1, "hsl(275, 85%, 32%)");
-        ctx.fillStyle = domeGrad;
-        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r - 3, 0, Math.PI * 2); ctx.fill();
-
-        // 5. Specular highlight (glossy top-left)
-        const spec = ctx.createRadialGradient(
-          bm.x - bm.r * 0.4, bm.y - bm.r * 0.5, 0.5,
-          bm.x - bm.r * 0.3, bm.y - bm.r * 0.35, bm.r * 0.55
+        // 3. Volumetric cyan body (top-lit)
+        const body = ctx.createRadialGradient(
+          isl.x - 22, isl.y - 28, 4,
+          isl.x, isl.y, 78
         );
-        spec.addColorStop(0, "rgba(255,255,255,0.95)");
-        spec.addColorStop(0.5, "rgba(255,255,255,0.25)");
+        body.addColorStop(0, "hsl(188, 100%, 74%)");
+        body.addColorStop(0.42, "hsl(192, 95%, 46%)");
+        body.addColorStop(0.78, "hsl(198, 90%, 24%)");
+        body.addColorStop(1, "hsl(210, 80%, 12%)");
+        ctx.fillStyle = body;
+        ctx.fill(path);
+
+        // 4. Magenta core light bleeding from inside
+        ctx.save();
+        ctx.clip(path);
+        const core = ctx.createRadialGradient(isl.x, isl.y, 2, isl.x, isl.y, 58);
+        core.addColorStop(0, flashing ? "hsla(320, 100%, 92%, 0.98)" : "hsla(320, 100%, 78%, 0.9)");
+        core.addColorStop(0.45, "hsla(322, 100%, 58%, 0.5)");
+        core.addColorStop(1, "hsla(320, 100%, 50%, 0)");
+        ctx.fillStyle = core;
+        ctx.fillRect(isl.x - 100, isl.y - 100, 200, 200);
+
+        // 4b. Inner beveled shading along the rim (depth)
+        ctx.shadowBlur = 16;
+        ctx.shadowColor = "rgba(0,0,0,0.65)";
+        ctx.strokeStyle = "rgba(0,0,0,0.5)";
+        ctx.lineWidth = 10;
+        ctx.stroke(path);
+        ctx.restore();
+
+        // 5. Polished rim + specular ridge
+        ctx.strokeStyle = "hsla(185, 100%, 95%, 0.85)";
+        ctx.lineWidth = 1.8;
+        ctx.lineJoin = "round";
+        ctx.stroke(path);
+
+        ctx.save();
+        ctx.clip(path);
+        const spec = ctx.createRadialGradient(
+          isl.x - 20, isl.y - 26, 1,
+          isl.x - 16, isl.y - 20, 46
+        );
+        spec.addColorStop(0, "rgba(255,255,255,0.55)");
+        spec.addColorStop(0.55, "rgba(255,255,255,0.12)");
         spec.addColorStop(1, "rgba(255,255,255,0)");
         ctx.fillStyle = spec;
-        ctx.beginPath(); ctx.arc(bm.x - bm.r * 0.3, bm.y - bm.r * 0.35, bm.r * 0.55, 0, Math.PI * 2); ctx.fill();
-
-        // 6. Thin rim highlight around dome edge
-        ctx.strokeStyle = "hsla(0,0%,100%,0.35)";
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r - 3, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillRect(isl.x - 100, isl.y - 100, 200, 200);
+        ctx.restore();
       }
+      ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
 
       // --- one-way anti-drain gate: 3 yellow shutters, 45° angled, high in the lane ---
       {
