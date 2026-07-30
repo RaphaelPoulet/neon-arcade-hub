@@ -173,6 +173,7 @@ const NeonPinballGame = () => {
   const ballRef = useRef<Ball>({ x: LANE_X, y: LANE_BOTTOM_Y - BALL_R - 4, vx: 0, vy: 0, alive: false });
   const bumpersRef = useRef<Bumper[]>(BUMPERS_INIT.map(b => ({ ...b })));
   const gateOpenRef = useRef(0); // >0 = shutters swung open
+  const trailRef = useRef<{ x: number; y: number }[]>([]);
 
   const leftFlipRef = useRef({ angle: -REST_ANGLE, target: -REST_ANGLE, omega: 0 });
   const rightFlipRef = useRef({ angle: -REST_ANGLE, target: -REST_ANGLE, omega: 0 });
