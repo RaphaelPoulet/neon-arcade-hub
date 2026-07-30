@@ -583,31 +583,36 @@ const NeonPinballGame = () => {
         ctx.beginPath(); ctx.arc(bm.x, bm.y, bm.r - 3, 0, Math.PI * 2); ctx.stroke();
       }
 
-      // --- one-way anti-drain gate (metal shutters in the magenta wall) ---
+      // --- one-way anti-drain gate: 3 yellow shutters, 45° angled, high in the lane ---
       {
         const open = gateOpenRef.current > 0;
         const swing = open ? 1 : 0;
-        const gw = GATE_X2 - GATE_X1;
-        const bars = 4;
+        const gdx = GATE_BX - GATE_AX, gdy = GATE_BY - GATE_AY;
+        const glen = Math.hypot(gdx, gdy);
+        const gang = Math.atan2(gdy, gdx);
+        const bars = 3;
         ctx.save();
-        ctx.shadowColor = "hsla(320, 100%, 60%, 0.9)";
-        ctx.shadowBlur = open ? 8 : 20;
+        ctx.translate(GATE_AX, GATE_AY);
+        ctx.rotate(gang);
+        ctx.shadowColor = "hsla(50, 100%, 60%, 0.9)";
+        ctx.shadowBlur = open ? 8 : 22;
+        const seg = (glen - 6) / bars;
         for (let i = 0; i < bars; i++) {
-          const bx = GATE_X1 + 3 + (gw - 6) * (i / bars);
-          const bw = (gw - 6) / bars - 3;
+          const bx = 3 + seg * i;
+          const bw = seg - 3;
           ctx.save();
-          ctx.translate(bx + bw / 2, GATE_Y);
+          ctx.translate(bx + bw / 2, 0);
           ctx.rotate(swing * -1.15);
           const grad = ctx.createLinearGradient(0, -GATE_HALF, 0, GATE_HALF);
-          grad.addColorStop(0, "hsl(320, 90%, 72%)");
-          grad.addColorStop(0.45, "hsl(320, 80%, 46%)");
-          grad.addColorStop(1, "hsl(320, 70%, 24%)");
+          grad.addColorStop(0, "hsl(52, 100%, 82%)");
+          grad.addColorStop(0.45, "hsl(48, 100%, 55%)");
+          grad.addColorStop(1, "hsl(42, 90%, 32%)");
           ctx.fillStyle = grad;
           ctx.beginPath();
           ctx.roundRect(-bw / 2, -GATE_HALF, bw, GATE_HALF * 2, 3);
           ctx.fill();
           ctx.shadowBlur = 0;
-          ctx.strokeStyle = "hsla(0,0%,100%,0.45)";
+          ctx.strokeStyle = "hsla(0,0%,100%,0.55)";
           ctx.lineWidth = 1;
           ctx.beginPath();
           ctx.moveTo(-bw / 2 + 2, -GATE_HALF + 1.5);
@@ -615,14 +620,15 @@ const NeonPinballGame = () => {
           ctx.stroke();
           ctx.restore();
         }
-        // pivot studs
+        // pivot studs at both ends of the angled gate
         ctx.shadowBlur = 0;
-        ctx.fillStyle = "hsl(50, 100%, 78%)";
-        for (const px of [GATE_X1 + 3, GATE_X2 - 3]) {
-          ctx.beginPath(); ctx.arc(px, GATE_Y, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "hsl(50, 100%, 85%)";
+        for (const px of [3, glen - 3]) {
+          ctx.beginPath(); ctx.arc(px, 0, 2.8, 0, Math.PI * 2); ctx.fill();
         }
         ctx.restore();
       }
+
 
       // launcher chute hint
       ctx.strokeStyle = "hsla(50, 100%, 60%, 0.4)";
