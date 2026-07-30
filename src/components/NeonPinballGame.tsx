@@ -662,10 +662,33 @@ const NeonPinballGame = () => {
       drawFlipper(PIVOT_L_X, PIVOT_Y, leftFlipRef.current.angle, false);
       drawFlipper(PIVOT_R_X, PIVOT_Y, rightFlipRef.current.angle, true);
 
-      // ball
+      // ball + hyper-speed motion blur trail
       const b = ballRef.current;
       if (b.alive) {
-        ctx.shadowBlur = 20;
+        const speed = Math.hypot(b.vx, b.vy);
+        const trail = trailRef.current;
+        trail.push({ x: b.x, y: b.y });
+        const maxTrail = Math.round(6 + Math.min(1, speed / 1600) * 34); // longer trail the faster it flies
+        while (trail.length > maxTrail) trail.shift();
+
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        for (let i = 0; i < trail.length; i++) {
+          const t = i / trail.length;           // 0 = oldest
+          const p = trail[i];
+          const r = BALL_R * (0.25 + 0.75 * t);
+          const a = 0.05 + 0.5 * t * t;
+          ctx.shadowBlur = 26 * t;
+          ctx.shadowColor = C.ballGlow;
+          const tg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+          tg.addColorStop(0, `hsla(320, 100%, 82%, ${a})`);
+          tg.addColorStop(1, "hsla(320, 100%, 55%, 0)");
+          ctx.fillStyle = tg;
+          ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+
+        ctx.shadowBlur = 20 + Math.min(1, speed / 1600) * 30;
         ctx.shadowColor = C.ballGlow;
         const bg = ctx.createRadialGradient(b.x - 3, b.y - 3, 1, b.x, b.y, BALL_R);
         bg.addColorStop(0, "hsl(60, 100%, 90%)");
@@ -673,6 +696,8 @@ const NeonPinballGame = () => {
         ctx.fillStyle = bg;
         ctx.beginPath(); ctx.arc(b.x, b.y, BALL_R, 0, Math.PI * 2); ctx.fill();
         ctx.shadowBlur = 0;
+      } else {
+        trailRef.current.length = 0;
       }
     };
 
