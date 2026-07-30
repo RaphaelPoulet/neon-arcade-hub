@@ -56,13 +56,42 @@ const ACTIVE_ANGLE = (32 * Math.PI) / 180;
 const FLIPPER_UP_SPEED = 28;
 const FLIPPER_DOWN_SPEED = 14;
 
-// --- Bumpers ---
-interface Bumper { x: number; y: number; r: number; flash: number; }
-const BUMPERS_INIT: Bumper[] = [
-  { x: 140, y: 230, r: 26, flash: 0 },
-  { x: 320, y: 200, r: 26, flash: 0 },
-  { x: 230, y: 340, r: 28, flash: 0 },
+// --- Solid organic islands (replace bumpers + internal guides) ---
+interface Island {
+  x: number; y: number;
+  pts: { x: number; y: number }[];  // closed polygon outline (world coords)
+  flash: number;
+}
+const ISLAND_HALF = 3; // extra collision padding so the ball never clips the sculpted edge
+
+// Builds a rounded, distorted "pebble": irregular radii + undulating edge.
+function makeIsland(x: number, y: number, baseR: number, radii: number[], rot: number): Island {
+  const n = radii.length;
+  const pts: { x: number; y: number }[] = [];
+  const SUB = 10; // interpolated samples per lobe => smooth organic outline
+  for (let i = 0; i < n * SUB; i++) {
+    const f = i / SUB;
+    const i0 = Math.floor(f) % n;
+    const i1 = (i0 + 1) % n;
+    const t = f - Math.floor(f);
+    const s = t * t * (3 - 2 * t); // smoothstep between lobe radii
+    const r = baseR * (radii[i0] * (1 - s) + radii[i1] * s);
+    const a = rot + (i / (n * SUB)) * Math.PI * 2;
+    const undulate = 1 + 0.035 * Math.sin(a * 7 + rot * 3);
+    pts.push({ x: x + Math.cos(a) * r * undulate, y: y + Math.sin(a) * r * undulate });
+  }
+  return { x, y, pts, flash: 0 };
+}
+
+const ISLANDS_INIT: Island[] = [
+  // upper-left rounded triangle-ish pebble
+  makeIsland(138, 268, 54, [1.05, 0.72, 1.0, 0.62, 0.95], 0.4),
+  // upper-right smaller sculpted shard
+  makeIsland(338, 232, 46, [0.95, 1.08, 0.66, 1.0, 0.7, 0.9], -0.6),
+  // large central island — defines the rebound channels above the flippers
+  makeIsland(232, 440, 62, [1.1, 0.68, 1.02, 0.7, 0.98, 0.64], 1.1),
 ];
+
 
 // --- Walls ---
 interface Wall { x1: number; y1: number; x2: number; y2: number; halfW?: number; accent?: "cyan" | "magenta"; }
