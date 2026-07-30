@@ -319,27 +319,29 @@ const NeonPinballGame = () => {
       return false;
     };
 
-    const collideBumper = (b: Ball, bm: Bumper) => {
-      const dx = b.x - bm.x, dy = b.y - bm.y;
-      const rSum = BALL_R + bm.r;
-      const d2 = dx * dx + dy * dy;
-      if (d2 > rSum * rSum) return false;
-      const dist = Math.sqrt(d2) || 0.0001;
-      const nx = dx / dist, ny = dy / dist;
-      b.x = bm.x + nx * rSum;
-      b.y = bm.y + ny * rSum;
-      const vn = b.vx * nx + b.vy * ny;
-      if (vn < 0) {
-        const j = -(1 + BUMPER_RESTITUTION) * vn;
-        b.vx += j * nx; b.vy += j * ny;
-        // extra kick
-        b.vx += nx * 120; b.vy += ny * 120;
-        bm.flash = 0.25;
-        scoreRef.current += 100;
-        return true;
+    // Solid island collision: swept against every edge of the sculpted outline.
+    const collideIsland = (b: Ball, isl: Island) => {
+      // broad phase
+      if (Math.hypot(b.x - isl.x, b.y - isl.y) > 90 + BALL_R) return false;
+      let hit = false;
+      const pts = isl.pts;
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i], q = pts[(i + 1) % pts.length];
+        if (collideSeg(b, p.x, p.y, q.x, q.y, BUMPER_RESTITUTION, undefined, ISLAND_HALF)) {
+          hit = true;
+        }
       }
-      return false;
+      if (hit) {
+        // push slightly away from the island core so the ball never rests inside
+        const dx = b.x - isl.x, dy = b.y - isl.y;
+        const d = Math.hypot(dx, dy) || 1;
+        b.vx += (dx / d) * 90; b.vy += (dy / d) * 90;
+        isl.flash = 0.22;
+        scoreRef.current += 100;
+      }
+      return hit;
     };
+
 
     const step = (dt: number) => {
       const updateFlip = (f: { angle: number; target: number; omega: number }) => {
