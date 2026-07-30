@@ -20,7 +20,7 @@ const RESTITUTION = 0.62;
 const FLIPPER_RESTITUTION = 0.55;
 const BUMPER_RESTITUTION = 1.15;
 const FRICTION = 0.9955; // playfield rolling friction (per sub-step) — tames hyper-speed
-const MAX_SPEED = 2400;
+const MAX_SPEED = 3400;
 const SUBSTEPS = 6;
 
 // --- Ball ---
