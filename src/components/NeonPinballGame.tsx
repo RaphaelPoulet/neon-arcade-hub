@@ -32,12 +32,15 @@ const LANE_X = WIDTH - LANE_W / 2 - 4;      // center of lane
 const LANE_INNER_X = WIDTH - LANE_W - 8;    // inner wall x (widened lane)
 const LANE_TOP_Y = 170;                     // curve starts lower for a longer, wider ejection arc
 const LANE_BOTTOM_Y = HEIGHT - 40;          // lane goes almost to bottom
-const LAUNCH_IMPULSE = 7500;                // instant upward velocity on Space (unchanged)
+const LAUNCH_IMPULSE = 11000;               // instant upward velocity on Space (hyper-speed plunger)
 
-// --- One-way anti-drain gate (top of the launch ramp) ---
-const GATE_Y = LANE_TOP_Y + 6;              // gate sits just above the lane's inner wall
-const GATE_X1 = LANE_INNER_X;
-const GATE_X2 = WIDTH;
+// --- One-way anti-drain gate (high, 45° angled, just before the upper-right turn) ---
+const GATE_AX = LANE_INNER_X;               // lower-left end (on the magenta inner wall)
+const GATE_AY = LANE_TOP_Y + 1;
+const GATE_BX = WIDTH;                      // upper-right end (on the outer wall)
+const GATE_BY = LANE_TOP_Y - 51;            // 45° tilt up-and-right
+const GATE_CX = (GATE_AX + GATE_BX) / 2;
+const GATE_CY = (GATE_AY + GATE_BY) / 2;
 const GATE_HALF = 6;
 const GATE_OPEN_TIME = 0.35;                // seconds the shutters stay open after the ball pushes through
 
