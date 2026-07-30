@@ -21,10 +21,11 @@ const FLIPPER_RESTITUTION = 0.55;
 const BUMPER_RESTITUTION = 1.15;
 const FRICTION = 0.9955; // playfield rolling friction (per sub-step) — tames hyper-speed
 const MAX_SPEED = 3400;
-const SUBSTEPS = 6;
+const SUBSTEPS = 10; // denser sub-stepping: no tunneling through flippers/islands
 
-// --- Ball ---
-const BALL_R = 11;
+// --- Ball (solid, volumetric) ---
+const BALL_R = 12.5;
+
 
 // --- Launcher lane ---
 const LANE_W = 44;
