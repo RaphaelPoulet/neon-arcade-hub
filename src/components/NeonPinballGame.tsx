@@ -193,7 +193,7 @@ const NeonPinballGame = () => {
   });
 
   const ballRef = useRef<Ball>({ x: LANE_X, y: LANE_BOTTOM_Y - BALL_R - 4, vx: 0, vy: 0, alive: false });
-  const bumpersRef = useRef<Bumper[]>(BUMPERS_INIT.map(b => ({ ...b })));
+  const islandsRef = useRef<Island[]>(ISLANDS_INIT.map(i => ({ ...i, flash: 0 })));
   const gateOpenRef = useRef(0); // >0 = shutters swung open
   const trailRef = useRef<{ x: number; y: number }[]>([]);
 
