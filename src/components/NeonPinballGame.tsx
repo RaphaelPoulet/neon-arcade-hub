@@ -98,6 +98,49 @@ const WALLS: Wall[] = [
   { x1: LANE_INNER_X - 20, y1: HEIGHT - 260, x2: LANE_INNER_X - 65, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "magenta" },
 ];
 
+// --- Central sculpted triangular obstacle (solid body, rounded corners, curved edges) ---
+// Positioned well BELOW the central bumper (y 340, r 28) for a large clear gap.
+const TRI_APEX_X = 230;
+const TRI_APEX_Y = 545;
+const TRI_HALF_W = 56;
+const TRI_BASE_Y = 622;
+const TRI_EDGE_HALF = 8;          // physical half-thickness of each edge (rounded body)
+const TRI_BULGE = 9;              // outward curvature of each edge (organic, non-straight)
+const TRI_PTS: [number, number][] = [
+  [TRI_APEX_X, TRI_APEX_Y],
+  [TRI_APEX_X + TRI_HALF_W, TRI_BASE_Y],
+  [TRI_APEX_X - TRI_HALF_W, TRI_BASE_Y],
+];
+const TRI_CX = (TRI_PTS[0][0] + TRI_PTS[1][0] + TRI_PTS[2][0]) / 3;
+const TRI_CY = (TRI_PTS[0][1] + TRI_PTS[1][1] + TRI_PTS[2][1]) / 3;
+// Collision polyline: each curved edge sampled into small segments (solid, no tunneling)
+const TRI_SEGS: { x1: number; y1: number; x2: number; y2: number }[] = (() => {
+  const segs: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  const SAMPLES = 8;
+  for (let i = 0; i < 3; i++) {
+    const [ax, ay] = TRI_PTS[i];
+    const [bx, by] = TRI_PTS[(i + 1) % 3];
+    const mx = (ax + bx) / 2, my = (ay + by) / 2;
+    // control point pushed outward from the centroid → convex, curved edge
+    const ox = mx - TRI_CX, oy = my - TRI_CY;
+    const ol = Math.hypot(ox, oy) || 1;
+    const cx = mx + (ox / ol) * TRI_BULGE * 2;
+    const cy = my + (oy / ol) * TRI_BULGE * 2;
+    let px = ax, py = ay;
+    for (let s = 1; s <= SAMPLES; s++) {
+      const t = s / SAMPLES;
+      const it = 1 - t;
+      const qx = it * it * ax + 2 * it * t * cx + t * t * bx;
+      const qy = it * it * ay + 2 * it * t * cy + t * t * by;
+      segs.push({ x1: px, y1: py, x2: qx, y2: qy });
+      px = qx; py = qy;
+    }
+  }
+  return segs;
+})();
+
+
+
 // Drain zone: ONLY between the two flipper pivots
 const DRAIN_Y = HEIGHT - 10;
 const DRAIN_X_MIN = PIVOT_L_X + 8;
