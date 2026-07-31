@@ -91,13 +91,55 @@ const WALLS: Wall[] = [
   { x1: 30, y1: 190, x2: 78, y2: 300, halfW: INNER_HALF, accent: "cyan" },
   // Right slanted deflector (funnels toward right bumper)
   { x1: 405, y1: 200, x2: 360, y2: 305, halfW: INNER_HALF, accent: "magenta" },
-  // Center chevron below middle bumper (inverted V) — moved down for clear bumper gap
-  { x1: 195, y1: 525, x2: 230, y2: 495, halfW: INNER_HALF, accent: "cyan" },
-  { x1: 230, y1: 495, x2: 265, y2: 525, halfW: INNER_HALF, accent: "magenta" },
+  // (central triangular obstacle is defined separately below — see TRI_*)
+
   // Short guide rails above flippers to prevent easy drain along walls
   { x1: 60, y1: HEIGHT - 260, x2: 105, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "cyan" },
   { x1: LANE_INNER_X - 20, y1: HEIGHT - 260, x2: LANE_INNER_X - 65, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "magenta" },
 ];
+
+// --- Central sculpted triangular obstacle (solid body, rounded corners, curved edges) ---
+// Positioned well BELOW the central bumper (y 340, r 28) for a large clear gap.
+const TRI_APEX_X = 230;
+const TRI_APEX_Y = 545;
+const TRI_HALF_W = 56;
+const TRI_BASE_Y = 622;
+const TRI_EDGE_HALF = 8;          // physical half-thickness of each edge (rounded body)
+const TRI_BULGE = 9;              // outward curvature of each edge (organic, non-straight)
+const TRI_PTS: [number, number][] = [
+  [TRI_APEX_X, TRI_APEX_Y],
+  [TRI_APEX_X + TRI_HALF_W, TRI_BASE_Y],
+  [TRI_APEX_X - TRI_HALF_W, TRI_BASE_Y],
+];
+const TRI_CX = (TRI_PTS[0][0] + TRI_PTS[1][0] + TRI_PTS[2][0]) / 3;
+const TRI_CY = (TRI_PTS[0][1] + TRI_PTS[1][1] + TRI_PTS[2][1]) / 3;
+// Collision polyline: each curved edge sampled into small segments (solid, no tunneling)
+const TRI_SEGS: { x1: number; y1: number; x2: number; y2: number }[] = (() => {
+  const segs: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  const SAMPLES = 8;
+  for (let i = 0; i < 3; i++) {
+    const [ax, ay] = TRI_PTS[i];
+    const [bx, by] = TRI_PTS[(i + 1) % 3];
+    const mx = (ax + bx) / 2, my = (ay + by) / 2;
+    // control point pushed outward from the centroid → convex, curved edge
+    const ox = mx - TRI_CX, oy = my - TRI_CY;
+    const ol = Math.hypot(ox, oy) || 1;
+    const cx = mx + (ox / ol) * TRI_BULGE * 2;
+    const cy = my + (oy / ol) * TRI_BULGE * 2;
+    let px = ax, py = ay;
+    for (let s = 1; s <= SAMPLES; s++) {
+      const t = s / SAMPLES;
+      const it = 1 - t;
+      const qx = it * it * ax + 2 * it * t * cx + t * t * bx;
+      const qy = it * it * ay + 2 * it * t * cy + t * t * by;
+      segs.push({ x1: px, y1: py, x2: qx, y2: qy });
+      px = qx; py = qy;
+    }
+  }
+  return segs;
+})();
+
+
 
 // Drain zone: ONLY between the two flipper pivots
 const DRAIN_Y = HEIGHT - 10;
@@ -134,6 +176,25 @@ const C = {
   bumperGlow: "hsla(280, 100%, 70%, 0.7)",
   bumperFlash: "hsl(60, 100%, 85%)",
 };
+
+// Closest point on segment A (the ball's swept path) to segment B (a solid body edge).
+function segSegClosest(
+  ax: number, ay: number, bx: number, by: number,
+  cx: number, cy: number, dx2: number, dy2: number
+) {
+  let best = { t: 0, px: ax, py: ay, dist: Infinity };
+  const N = 12;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const px = ax + (bx - ax) * t;
+    const py = ay + (by - ay) * t;
+    const cp = segClosestPoint(px, py, cx, cy, dx2, dy2);
+    const d = Math.hypot(px - cp.x, py - cp.y);
+    if (d < best.dist) best = { t, px, py, dist: d };
+  }
+  return best;
+}
+
 
 function segClosestPoint(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
   const dx = x2 - x1, dy = y2 - y1;
@@ -353,10 +414,14 @@ const NeonPinballGame = () => {
         b.vy *= FRICTION;
         const sp = Math.hypot(b.vx, b.vy);
         if (sp > MAX_SPEED) { b.vx *= MAX_SPEED / sp; b.vy *= MAX_SPEED / sp; }
+        const prevX = b.x, prevY = b.y;
         b.x += b.vx * sdt;
         b.y += b.vy * sdt;
 
         for (const w of WALLS) collideSeg(b, w.x1, w.y1, w.x2, w.y2, RESTITUTION, undefined, w.halfW ?? 0);
+
+        // Central solid triangular obstacle (curved edges, rounded corners)
+        for (const t of TRI_SEGS) collideSeg(b, t.x1, t.y1, t.x2, t.y2, RESTITUTION, undefined, TRI_EDGE_HALF);
 
         // One-way gate: blocks the ball from rolling back down the ramp.
         // Swings open while the ball travels upward through it.
@@ -367,24 +432,28 @@ const NeonPinballGame = () => {
           collideSeg(b, GATE_AX, GATE_AY, GATE_BX, GATE_BY, 0.35, undefined, GATE_HALF);
         }
 
+        // --- Flippers: solid thick capsule bodies with swept (continuous) collision ---
         const { lx, ly, rx, ry } = flipperEndpoints();
-        {
-          const cp = segClosestPoint(b.x, b.y, PIVOT_L_X, PIVOT_Y, lx, ly);
-          const w = leftFlipRef.current.omega;
-          const rX = cp.x - PIVOT_L_X, rY = cp.y - PIVOT_Y;
-          if (collideSeg(b, PIVOT_L_X, PIVOT_Y, lx, ly, FLIPPER_RESTITUTION, { vx: w * rY, vy: -w * rX })) {
+        const FLIP_HALF = FLIPPER_W / 2;
+        const hitFlipper = (
+          px: number, py: number, ex: number, ey: number,
+          omega: number, sign: number
+        ) => {
+          // Continuous check: if the swept path grazed the flipper body, rewind onto it.
+          const near = segSegClosest(prevX, prevY, b.x, b.y, px, py, ex, ey);
+          if (near.dist < BALL_R + FLIP_HALF) {
+            b.x = near.px; b.y = near.py;
+          }
+          const cp = segClosestPoint(b.x, b.y, px, py, ex, ey);
+          const rX = cp.x - px, rY = cp.y - py;
+          const surfVel = { vx: sign * omega * rY, vy: -sign * omega * rX };
+          if (collideSeg(b, px, py, ex, ey, FLIPPER_RESTITUTION, surfVel, FLIP_HALF)) {
             scoreRef.current += 20;
           }
-        }
-        {
-          const cp = segClosestPoint(b.x, b.y, PIVOT_R_X, PIVOT_Y, rx, ry);
-          const w = rightFlipRef.current.omega;
-          const rrX = cp.x - PIVOT_R_X, rrY = cp.y - PIVOT_Y;
-          if (collideSeg(b, PIVOT_R_X, PIVOT_Y, rx, ry, FLIPPER_RESTITUTION, { vx: -w * rrY, vy: w * rrX })) {
-            scoreRef.current += 20;
-          }
-          void cp;
-        }
+        };
+        hitFlipper(PIVOT_L_X, PIVOT_Y, lx, ly, leftFlipRef.current.omega, 1);
+        hitFlipper(PIVOT_R_X, PIVOT_Y, rx, ry, rightFlipRef.current.omega, -1);
+
 
         for (const bm of bumpersRef.current) collideBumper(b, bm);
 
@@ -631,7 +700,92 @@ const NeonPinballGame = () => {
       }
 
 
+      // --- Central sculpted triangular obstacle (rounded corners, curved edges) ---
+      {
+        const tracePath = (inset: number) => {
+          ctx.beginPath();
+          for (let i = 0; i < 3; i++) {
+            const [ax, ay] = TRI_PTS[i];
+            const [bx, by] = TRI_PTS[(i + 1) % 3];
+            const shrink = (x: number, y: number) => {
+              const vx = x - TRI_CX, vy = y - TRI_CY;
+              const l = Math.hypot(vx, vy) || 1;
+              return [x - (vx / l) * inset, y - (vy / l) * inset] as [number, number];
+            };
+            const [sax, say] = shrink(ax, ay);
+            const [sbx, sby] = shrink(bx, by);
+            const mx = (ax + bx) / 2, my = (ay + by) / 2;
+            const ox = mx - TRI_CX, oy = my - TRI_CY;
+            const ol = Math.hypot(ox, oy) || 1;
+            const cpx = mx + (ox / ol) * (TRI_BULGE * 2 - inset);
+            const cpy = my + (oy / ol) * (TRI_BULGE * 2 - inset);
+            if (i === 0) ctx.moveTo(sax, say);
+            else ctx.lineTo(sax, say);
+            ctx.quadraticCurveTo(cpx, cpy, sbx, sby);
+          }
+          ctx.closePath();
+        };
+
+        // drop shadow / volume base
+        ctx.save();
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = "rgba(0,0,0,0.9)";
+        ctx.shadowOffsetX = 4; ctx.shadowOffsetY = 6;
+        ctx.fillStyle = "rgba(4,2,14,0.95)";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = TRI_EDGE_HALF * 2;
+        tracePath(-TRI_EDGE_HALF);
+        ctx.strokeStyle = "rgba(4,2,14,0.95)";
+        ctx.stroke();
+        ctx.fill();
+        ctx.restore();
+
+        // neon glow halo
+        ctx.save();
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = "hsla(300, 100%, 62%, 0.9)";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = TRI_EDGE_HALF * 2;
+        ctx.strokeStyle = "hsla(300, 100%, 55%, 0.9)";
+        tracePath(0);
+        ctx.stroke();
+        ctx.restore();
+
+        // sculpted body: cyan → magenta gradient with volumetric shading
+        const g = ctx.createLinearGradient(TRI_APEX_X - TRI_HALF_W, TRI_APEX_Y, TRI_APEX_X + TRI_HALF_W, TRI_BASE_Y);
+        g.addColorStop(0, "hsl(190, 100%, 62%)");
+        g.addColorStop(0.5, "hsl(255, 95%, 58%)");
+        g.addColorStop(1, "hsl(320, 100%, 58%)");
+        ctx.save();
+        ctx.lineJoin = "round";
+        tracePath(0);
+        ctx.fillStyle = g;
+        ctx.fill();
+        // inner depth shading (darker toward the base)
+        const shade = ctx.createLinearGradient(0, TRI_APEX_Y, 0, TRI_BASE_Y + 6);
+        shade.addColorStop(0, "hsla(0,0%,100%,0.28)");
+        shade.addColorStop(0.55, "hsla(0,0%,0%,0)");
+        shade.addColorStop(1, "hsla(255,60%,6%,0.55)");
+        ctx.fillStyle = shade;
+        ctx.fill();
+        // beveled bright rim
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "hsla(0,0%,100%,0.75)";
+        tracePath(2);
+        ctx.stroke();
+        // specular highlight near the apex
+        ctx.beginPath();
+        ctx.ellipse(TRI_APEX_X - 8, TRI_APEX_Y + 26, 12, 20, -0.35, 0, Math.PI * 2);
+        const spec = ctx.createRadialGradient(TRI_APEX_X - 8, TRI_APEX_Y + 26, 0, TRI_APEX_X - 8, TRI_APEX_Y + 26, 22);
+        spec.addColorStop(0, "hsla(0,0%,100%,0.55)");
+        spec.addColorStop(1, "hsla(0,0%,100%,0)");
+        ctx.fillStyle = spec;
+        ctx.fill();
+        ctx.restore();
+      }
+
       // launcher chute hint
+
       ctx.strokeStyle = "hsla(50, 100%, 60%, 0.4)";
       ctx.lineWidth = 1;
       ctx.strokeRect(LANE_X - 12, LANE_BOTTOM_Y - 60, 24, 50);
