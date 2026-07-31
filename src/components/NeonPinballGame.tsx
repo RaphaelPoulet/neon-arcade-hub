@@ -100,12 +100,13 @@ const WALLS: Wall[] = [
 
 // --- Central sculpted triangular obstacle (solid body, rounded corners, curved edges) ---
 // Positioned well BELOW the central bumper (y 340, r 28) for a large clear gap.
+// Scaled to 50% and recentred in the mid-field between the bumpers and the flippers.
 const TRI_APEX_X = 230;
-const TRI_APEX_Y = 545;
-const TRI_HALF_W = 56;
-const TRI_BASE_Y = 622;
-const TRI_EDGE_HALF = 8;          // physical half-thickness of each edge (rounded body)
-const TRI_BULGE = 9;              // outward curvature of each edge (organic, non-straight)
+const TRI_APEX_Y = 471;
+const TRI_HALF_W = 28;
+const TRI_BASE_Y = 509;
+const TRI_EDGE_HALF = 5;          // physical half-thickness of each edge (rounded body)
+const TRI_BULGE = 4.5;            // outward curvature of each edge (organic, non-straight)
 const TRI_PTS: [number, number][] = [
   [TRI_APEX_X, TRI_APEX_Y],
   [TRI_APEX_X + TRI_HALF_W, TRI_BASE_Y],
