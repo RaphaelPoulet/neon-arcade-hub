@@ -177,6 +177,25 @@ const C = {
   bumperFlash: "hsl(60, 100%, 85%)",
 };
 
+// Closest point on segment A (the ball's swept path) to segment B (a solid body edge).
+function segSegClosest(
+  ax: number, ay: number, bx: number, by: number,
+  cx: number, cy: number, dx2: number, dy2: number
+) {
+  let best = { t: 0, px: ax, py: ay, dist: Infinity };
+  const N = 12;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const px = ax + (bx - ax) * t;
+    const py = ay + (by - ay) * t;
+    const cp = segClosestPoint(px, py, cx, cy, dx2, dy2);
+    const d = Math.hypot(px - cp.x, py - cp.y);
+    if (d < best.dist) best = { t, px, py, dist: d };
+  }
+  return best;
+}
+
+
 function segClosestPoint(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
   const dx = x2 - x1, dy = y2 - y1;
   const l2 = dx * dx + dy * dy;
