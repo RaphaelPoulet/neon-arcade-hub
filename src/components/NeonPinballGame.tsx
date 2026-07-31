@@ -414,10 +414,14 @@ const NeonPinballGame = () => {
         b.vy *= FRICTION;
         const sp = Math.hypot(b.vx, b.vy);
         if (sp > MAX_SPEED) { b.vx *= MAX_SPEED / sp; b.vy *= MAX_SPEED / sp; }
+        const prevX = b.x, prevY = b.y;
         b.x += b.vx * sdt;
         b.y += b.vy * sdt;
 
         for (const w of WALLS) collideSeg(b, w.x1, w.y1, w.x2, w.y2, RESTITUTION, undefined, w.halfW ?? 0);
+
+        // Central solid triangular obstacle (curved edges, rounded corners)
+        for (const t of TRI_SEGS) collideSeg(b, t.x1, t.y1, t.x2, t.y2, RESTITUTION, undefined, TRI_EDGE_HALF);
 
         // One-way gate: blocks the ball from rolling back down the ramp.
         // Swings open while the ball travels upward through it.
@@ -428,24 +432,28 @@ const NeonPinballGame = () => {
           collideSeg(b, GATE_AX, GATE_AY, GATE_BX, GATE_BY, 0.35, undefined, GATE_HALF);
         }
 
+        // --- Flippers: solid thick capsule bodies with swept (continuous) collision ---
         const { lx, ly, rx, ry } = flipperEndpoints();
-        {
-          const cp = segClosestPoint(b.x, b.y, PIVOT_L_X, PIVOT_Y, lx, ly);
-          const w = leftFlipRef.current.omega;
-          const rX = cp.x - PIVOT_L_X, rY = cp.y - PIVOT_Y;
-          if (collideSeg(b, PIVOT_L_X, PIVOT_Y, lx, ly, FLIPPER_RESTITUTION, { vx: w * rY, vy: -w * rX })) {
+        const FLIP_HALF = FLIPPER_W / 2;
+        const hitFlipper = (
+          px: number, py: number, ex: number, ey: number,
+          omega: number, sign: number
+        ) => {
+          // Continuous check: if the swept path grazed the flipper body, rewind onto it.
+          const near = segSegClosest(prevX, prevY, b.x, b.y, px, py, ex, ey);
+          if (near.dist < BALL_R + FLIP_HALF) {
+            b.x = near.px; b.y = near.py;
+          }
+          const cp = segClosestPoint(b.x, b.y, px, py, ex, ey);
+          const rX = cp.x - px, rY = cp.y - py;
+          const surfVel = { vx: sign * omega * rY, vy: -sign * omega * rX };
+          if (collideSeg(b, px, py, ex, ey, FLIPPER_RESTITUTION, surfVel, FLIP_HALF)) {
             scoreRef.current += 20;
           }
-        }
-        {
-          const cp = segClosestPoint(b.x, b.y, PIVOT_R_X, PIVOT_Y, rx, ry);
-          const w = rightFlipRef.current.omega;
-          const rrX = cp.x - PIVOT_R_X, rrY = cp.y - PIVOT_Y;
-          if (collideSeg(b, PIVOT_R_X, PIVOT_Y, rx, ry, FLIPPER_RESTITUTION, { vx: -w * rrY, vy: w * rrX })) {
-            scoreRef.current += 20;
-          }
-          void cp;
-        }
+        };
+        hitFlipper(PIVOT_L_X, PIVOT_Y, lx, ly, leftFlipRef.current.omega, 1);
+        hitFlipper(PIVOT_R_X, PIVOT_Y, rx, ry, rightFlipRef.current.omega, -1);
+
 
         for (const bm of bumpersRef.current) collideBumper(b, bm);
 
