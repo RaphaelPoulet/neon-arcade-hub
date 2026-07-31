@@ -700,7 +700,92 @@ const NeonPinballGame = () => {
       }
 
 
+      // --- Central sculpted triangular obstacle (rounded corners, curved edges) ---
+      {
+        const tracePath = (inset: number) => {
+          ctx.beginPath();
+          for (let i = 0; i < 3; i++) {
+            const [ax, ay] = TRI_PTS[i];
+            const [bx, by] = TRI_PTS[(i + 1) % 3];
+            const shrink = (x: number, y: number) => {
+              const vx = x - TRI_CX, vy = y - TRI_CY;
+              const l = Math.hypot(vx, vy) || 1;
+              return [x - (vx / l) * inset, y - (vy / l) * inset] as [number, number];
+            };
+            const [sax, say] = shrink(ax, ay);
+            const [sbx, sby] = shrink(bx, by);
+            const mx = (ax + bx) / 2, my = (ay + by) / 2;
+            const ox = mx - TRI_CX, oy = my - TRI_CY;
+            const ol = Math.hypot(ox, oy) || 1;
+            const cpx = mx + (ox / ol) * (TRI_BULGE * 2 - inset);
+            const cpy = my + (oy / ol) * (TRI_BULGE * 2 - inset);
+            if (i === 0) ctx.moveTo(sax, say);
+            else ctx.lineTo(sax, say);
+            ctx.quadraticCurveTo(cpx, cpy, sbx, sby);
+          }
+          ctx.closePath();
+        };
+
+        // drop shadow / volume base
+        ctx.save();
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = "rgba(0,0,0,0.9)";
+        ctx.shadowOffsetX = 4; ctx.shadowOffsetY = 6;
+        ctx.fillStyle = "rgba(4,2,14,0.95)";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = TRI_EDGE_HALF * 2;
+        tracePath(-TRI_EDGE_HALF);
+        ctx.strokeStyle = "rgba(4,2,14,0.95)";
+        ctx.stroke();
+        ctx.fill();
+        ctx.restore();
+
+        // neon glow halo
+        ctx.save();
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = "hsla(300, 100%, 62%, 0.9)";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = TRI_EDGE_HALF * 2;
+        ctx.strokeStyle = "hsla(300, 100%, 55%, 0.9)";
+        tracePath(0);
+        ctx.stroke();
+        ctx.restore();
+
+        // sculpted body: cyan → magenta gradient with volumetric shading
+        const g = ctx.createLinearGradient(TRI_APEX_X - TRI_HALF_W, TRI_APEX_Y, TRI_APEX_X + TRI_HALF_W, TRI_BASE_Y);
+        g.addColorStop(0, "hsl(190, 100%, 62%)");
+        g.addColorStop(0.5, "hsl(255, 95%, 58%)");
+        g.addColorStop(1, "hsl(320, 100%, 58%)");
+        ctx.save();
+        ctx.lineJoin = "round";
+        tracePath(0);
+        ctx.fillStyle = g;
+        ctx.fill();
+        // inner depth shading (darker toward the base)
+        const shade = ctx.createLinearGradient(0, TRI_APEX_Y, 0, TRI_BASE_Y + 6);
+        shade.addColorStop(0, "hsla(0,0%,100%,0.28)");
+        shade.addColorStop(0.55, "hsla(0,0%,0%,0)");
+        shade.addColorStop(1, "hsla(255,60%,6%,0.55)");
+        ctx.fillStyle = shade;
+        ctx.fill();
+        // beveled bright rim
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "hsla(0,0%,100%,0.75)";
+        tracePath(2);
+        ctx.stroke();
+        // specular highlight near the apex
+        ctx.beginPath();
+        ctx.ellipse(TRI_APEX_X - 8, TRI_APEX_Y + 26, 12, 20, -0.35, 0, Math.PI * 2);
+        const spec = ctx.createRadialGradient(TRI_APEX_X - 8, TRI_APEX_Y + 26, 0, TRI_APEX_X - 8, TRI_APEX_Y + 26, 22);
+        spec.addColorStop(0, "hsla(0,0%,100%,0.55)");
+        spec.addColorStop(1, "hsla(0,0%,100%,0)");
+        ctx.fillStyle = spec;
+        ctx.fill();
+        ctx.restore();
+      }
+
       // launcher chute hint
+
       ctx.strokeStyle = "hsla(50, 100%, 60%, 0.4)";
       ctx.lineWidth = 1;
       ctx.strokeRect(LANE_X - 12, LANE_BOTTOM_Y - 60, 24, 50);
