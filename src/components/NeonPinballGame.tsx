@@ -91,9 +91,8 @@ const WALLS: Wall[] = [
   { x1: 30, y1: 190, x2: 78, y2: 300, halfW: INNER_HALF, accent: "cyan" },
   // Right slanted deflector (funnels toward right bumper)
   { x1: 405, y1: 200, x2: 360, y2: 305, halfW: INNER_HALF, accent: "magenta" },
-  // Center chevron below middle bumper (inverted V) — moved down for clear bumper gap
-  { x1: 195, y1: 525, x2: 230, y2: 495, halfW: INNER_HALF, accent: "cyan" },
-  { x1: 230, y1: 495, x2: 265, y2: 525, halfW: INNER_HALF, accent: "magenta" },
+  // (central triangular obstacle is defined separately below — see TRI_*)
+
   // Short guide rails above flippers to prevent easy drain along walls
   { x1: 60, y1: HEIGHT - 260, x2: 105, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "cyan" },
   { x1: LANE_INNER_X - 20, y1: HEIGHT - 260, x2: LANE_INNER_X - 65, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "magenta" },
