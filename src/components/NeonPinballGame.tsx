@@ -448,10 +448,26 @@ const NeonPinballGame = () => {
         b.x += b.vx * sdt;
         b.y += b.vy * sdt;
 
-        for (const w of WALLS) collideSeg(b, w.x1, w.y1, w.x2, w.y2, RESTITUTION, undefined, w.halfW ?? 0);
+        const spBefore = Math.hypot(b.vx, b.vy);
+        let clacked = false;
+        for (const w of WALLS) {
+          if (collideSeg(b, w.x1, w.y1, w.x2, w.y2, RESTITUTION, undefined, w.halfW ?? 0)) clacked = true;
+        }
 
         // Central solid triangular obstacle (curved edges, rounded corners)
-        for (const t of TRI_SEGS) collideSeg(b, t.x1, t.y1, t.x2, t.y2, RESTITUTION, undefined, TRI_EDGE_HALF);
+        for (const t of TRI_SEGS) {
+          if (collideSeg(b, t.x1, t.y1, t.x2, t.y2, RESTITUTION, undefined, TRI_EDGE_HALF)) clacked = true;
+        }
+
+        // Right-side solid musical note obstacle
+        for (const n of NOTE_SEGS) {
+          if (collideSeg(b, n.x1, n.y1, n.x2, n.y2, RESTITUTION, undefined, n.halfW)) {
+            clacked = true;
+            scoreRef.current += 25;
+          }
+        }
+        if (clacked && spBefore > 120) sfxClack(Math.min(1, spBefore / 1200));
+
 
         // One-way gate: blocks the ball from rolling back down the ramp.
         // Swings open while the ball travels upward through it.
