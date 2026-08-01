@@ -278,16 +278,18 @@ const NeonPinballGame = () => {
         e.preventDefault();
         if (!keysRef.current[a]) {
           keysRef.current[a] = true;
-          if (a === "leftFlip") leftFlipRef.current.target = ACTIVE_ANGLE;
-          if (a === "rightFlip") rightFlipRef.current.target = ACTIVE_ANGLE;
+          if (a === "leftFlip") { leftFlipRef.current.target = ACTIVE_ANGLE; sfxFlipper(); }
+          if (a === "rightFlip") { rightFlipRef.current.target = ACTIVE_ANGLE; sfxFlipper(); }
           if (a === "launch") {
             if (stateRef.current === "ready" && ballRef.current.alive) {
               ballRef.current.vy = -LAUNCH_IMPULSE;
               gateOpenRef.current = GATE_OPEN_TIME;
               ballRef.current.vx = 0;
+              sfxLaunch();
               setGameState("playing");
             }
           }
+
         }
       }
       if (e.key === "Enter" && (stateRef.current === "idle" || stateRef.current === "gameover")) {
