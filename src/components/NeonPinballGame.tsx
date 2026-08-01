@@ -834,7 +834,62 @@ const NeonPinballGame = () => {
         ctx.restore();
       }
 
+      // --- Right-side sculpted musical note obstacle (beamed eighth note) ---
+      {
+        const capsule = (x1: number, y1: number, x2: number, y2: number, half: number) => {
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.lineWidth = half * 2;
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          ctx.stroke();
+        };
+        const traceAll = (pad: number, stroke: string, blur: number, dxo = 0, dyo = 0) => {
+          ctx.save();
+          ctx.translate(dxo, dyo);
+          ctx.strokeStyle = stroke;
+          ctx.shadowColor = stroke;
+          ctx.shadowBlur = blur;
+          for (const n of NOTE_SEGS) capsule(n.x1, n.y1, n.x2, n.y2, n.halfW + pad);
+          ctx.restore();
+        };
+
+        // drop shadow for volume
+        traceAll(1.5, "rgba(3,1,10,0.95)", 14, 4, 6);
+        // outer neon halo
+        traceAll(1, "hsla(320, 100%, 60%, 0.85)", 26);
+        // solid body with vertical volumetric gradient
+        const bodyG = ctx.createLinearGradient(NOTE_HEAD_X - 30, NOTE_STEM_TOP_Y, NOTE_HEAD_X + 60, NOTE_HEAD_Y);
+        bodyG.addColorStop(0, "hsl(330, 100%, 72%)");
+        bodyG.addColorStop(0.45, "hsl(320, 100%, 56%)");
+        bodyG.addColorStop(1, "hsl(300, 90%, 34%)");
+        ctx.save();
+        ctx.strokeStyle = bodyG as unknown as string;
+        ctx.shadowBlur = 0;
+        for (const n of NOTE_SEGS) capsule(n.x1, n.y1, n.x2, n.y2, n.halfW);
+        ctx.restore();
+        // beveled bright rim (upper-left light)
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.strokeStyle = "hsla(0,0%,100%,0.8)";
+        ctx.shadowBlur = 0;
+        for (const n of NOTE_SEGS) capsule(n.x1 - 1.5, n.y1 - 2, n.x2 - 1.5, n.y2 - 2, n.halfW * 0.42);
+        ctx.restore();
+        // specular highlight on the note head
+        ctx.save();
+        const spec = ctx.createRadialGradient(NOTE_HEAD_X - 8, NOTE_HEAD_Y - 7, 0, NOTE_HEAD_X - 8, NOTE_HEAD_Y - 7, 18);
+        spec.addColorStop(0, "hsla(0,0%,100%,0.65)");
+        spec.addColorStop(1, "hsla(0,0%,100%,0)");
+        ctx.fillStyle = spec;
+        ctx.beginPath();
+        ctx.ellipse(NOTE_HEAD_X - 8, NOTE_HEAD_Y - 7, 15, 9, NOTE_HEAD_TILT, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
       // launcher chute hint
+
 
       ctx.strokeStyle = "hsla(50, 100%, 60%, 0.4)";
       ctx.lineWidth = 1;
