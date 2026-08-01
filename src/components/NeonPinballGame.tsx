@@ -3,6 +3,8 @@ import { Settings } from "lucide-react";
 import { toast } from "sonner";
 import GameOverLeaderboard from "@/components/GameOverLeaderboard";
 import pinballBg from "@/assets/pinball-bg.jpg";
+import { unlockAudio, sfxBumper, sfxClack, sfxFlipper, sfxLaunch, sfxDrain } from "@/lib/arcadeAudio";
+
 
 // ============================================================
 // NEON PINBALL — Phase 1.1: sealed walls, instant launch, bumpers
@@ -89,14 +91,39 @@ const WALLS: Wall[] = [
   // --- Internal guide walls ---
   // Left slanted deflector (funnels toward left bumper)
   { x1: 30, y1: 190, x2: 78, y2: 300, halfW: INNER_HALF, accent: "cyan" },
-  // Right slanted deflector (funnels toward right bumper)
-  { x1: 405, y1: 200, x2: 360, y2: 305, halfW: INNER_HALF, accent: "magenta" },
+  // (right-side mid wall + lower diagonal replaced by the musical-note obstacle — see NOTE_*)
   // (central triangular obstacle is defined separately below — see TRI_*)
 
-  // Short guide rails above flippers to prevent easy drain along walls
+  // Short guide rail above the left flipper
   { x1: 60, y1: HEIGHT - 260, x2: 105, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "cyan" },
-  { x1: LANE_INNER_X - 20, y1: HEIGHT - 260, x2: LANE_INNER_X - 65, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "magenta" },
 ];
+
+// --- Right-side sculpted musical note obstacle (beamed eighth note, solid body) ---
+const NOTE_HEAD_X = 384;
+const NOTE_HEAD_Y = 604;
+const NOTE_HEAD_RX = 24;          // capsule half-length of the tilted note head
+const NOTE_HEAD_RY = 15;          // capsule radius (physical half-thickness)
+const NOTE_HEAD_TILT = -0.32;     // radians
+const NOTE_STEM_X = NOTE_HEAD_X + 21;
+const NOTE_STEM_TOP_Y = 408;
+const NOTE_STEM_BOT_Y = NOTE_HEAD_Y - 6;
+const NOTE_STEM_HALF = 6;
+const NOTE_BEAM_X2 = NOTE_STEM_X + 30;
+const NOTE_BEAM_Y2 = NOTE_STEM_TOP_Y + 30;
+const NOTE_BEAM_HALF = 8;
+// Head capsule endpoints (tilted)
+const NOTE_HEAD_AX = NOTE_HEAD_X - Math.cos(NOTE_HEAD_TILT) * (NOTE_HEAD_RX - NOTE_HEAD_RY);
+const NOTE_HEAD_AY = NOTE_HEAD_Y - Math.sin(NOTE_HEAD_TILT) * (NOTE_HEAD_RX - NOTE_HEAD_RY);
+const NOTE_HEAD_BX = NOTE_HEAD_X + Math.cos(NOTE_HEAD_TILT) * (NOTE_HEAD_RX - NOTE_HEAD_RY);
+const NOTE_HEAD_BY = NOTE_HEAD_Y + Math.sin(NOTE_HEAD_TILT) * (NOTE_HEAD_RX - NOTE_HEAD_RY);
+
+const NOTE_SEGS: { x1: number; y1: number; x2: number; y2: number; halfW: number }[] = [
+  { x1: NOTE_HEAD_AX, y1: NOTE_HEAD_AY, x2: NOTE_HEAD_BX, y2: NOTE_HEAD_BY, halfW: NOTE_HEAD_RY },
+  { x1: NOTE_STEM_X, y1: NOTE_STEM_TOP_Y, x2: NOTE_STEM_X, y2: NOTE_STEM_BOT_Y, halfW: NOTE_STEM_HALF },
+  { x1: NOTE_STEM_X, y1: NOTE_STEM_TOP_Y, x2: NOTE_BEAM_X2, y2: NOTE_BEAM_Y2, halfW: NOTE_BEAM_HALF },
+  { x1: NOTE_STEM_X, y1: NOTE_STEM_TOP_Y + 22, x2: NOTE_BEAM_X2, y2: NOTE_BEAM_Y2 + 22, halfW: NOTE_BEAM_HALF - 2 },
+];
+
 
 // --- Central sculpted triangular obstacle (solid body, rounded corners, curved edges) ---
 // Positioned well BELOW the central bumper (y 340, r 28) for a large clear gap.
@@ -251,16 +278,18 @@ const NeonPinballGame = () => {
         e.preventDefault();
         if (!keysRef.current[a]) {
           keysRef.current[a] = true;
-          if (a === "leftFlip") leftFlipRef.current.target = ACTIVE_ANGLE;
-          if (a === "rightFlip") rightFlipRef.current.target = ACTIVE_ANGLE;
+          if (a === "leftFlip") { leftFlipRef.current.target = ACTIVE_ANGLE; sfxFlipper(); }
+          if (a === "rightFlip") { rightFlipRef.current.target = ACTIVE_ANGLE; sfxFlipper(); }
           if (a === "launch") {
             if (stateRef.current === "ready" && ballRef.current.alive) {
               ballRef.current.vy = -LAUNCH_IMPULSE;
               gateOpenRef.current = GATE_OPEN_TIME;
               ballRef.current.vx = 0;
+              sfxLaunch();
               setGameState("playing");
             }
           }
+
         }
       }
       if (e.key === "Enter" && (stateRef.current === "idle" || stateRef.current === "gameover")) {
@@ -290,7 +319,9 @@ const NeonPinballGame = () => {
   }, []);
 
   const startGame = useCallback(() => {
+    unlockAudio();
     scoreRef.current = 0;
+
     ballNumRef.current = 1;
     setScore(0);
     setBallNum(1);
@@ -419,10 +450,26 @@ const NeonPinballGame = () => {
         b.x += b.vx * sdt;
         b.y += b.vy * sdt;
 
-        for (const w of WALLS) collideSeg(b, w.x1, w.y1, w.x2, w.y2, RESTITUTION, undefined, w.halfW ?? 0);
+        const spBefore = Math.hypot(b.vx, b.vy);
+        let clacked = false;
+        for (const w of WALLS) {
+          if (collideSeg(b, w.x1, w.y1, w.x2, w.y2, RESTITUTION, undefined, w.halfW ?? 0)) clacked = true;
+        }
 
         // Central solid triangular obstacle (curved edges, rounded corners)
-        for (const t of TRI_SEGS) collideSeg(b, t.x1, t.y1, t.x2, t.y2, RESTITUTION, undefined, TRI_EDGE_HALF);
+        for (const t of TRI_SEGS) {
+          if (collideSeg(b, t.x1, t.y1, t.x2, t.y2, RESTITUTION, undefined, TRI_EDGE_HALF)) clacked = true;
+        }
+
+        // Right-side solid musical note obstacle
+        for (const n of NOTE_SEGS) {
+          if (collideSeg(b, n.x1, n.y1, n.x2, n.y2, RESTITUTION, undefined, n.halfW)) {
+            clacked = true;
+            scoreRef.current += 25;
+          }
+        }
+        if (clacked && spBefore > 120) sfxClack(Math.min(1, spBefore / 1200));
+
 
         // One-way gate: blocks the ball from rolling back down the ramp.
         // Swings open while the ball travels upward through it.
@@ -456,7 +503,7 @@ const NeonPinballGame = () => {
         hitFlipper(PIVOT_R_X, PIVOT_Y, rx, ry, rightFlipRef.current.omega, -1);
 
 
-        for (const bm of bumpersRef.current) collideBumper(b, bm);
+        for (const bm of bumpersRef.current) { if (collideBumper(b, bm)) sfxBumper(); }
 
         // drain — only between flipper pivots
         if (b.y > DRAIN_Y && b.x > DRAIN_X_MIN && b.x < DRAIN_X_MAX) {
@@ -474,8 +521,10 @@ const NeonPinballGame = () => {
     };
 
     const onBallLost = () => {
+      sfxDrain(ballNumRef.current >= 3);
       if (ballNumRef.current >= 3) {
         if (scoreRef.current > highScore) {
+
           setHighScore(scoreRef.current);
           localStorage.setItem("neon-pinball-hi", String(scoreRef.current));
         }
@@ -785,7 +834,62 @@ const NeonPinballGame = () => {
         ctx.restore();
       }
 
+      // --- Right-side sculpted musical note obstacle (beamed eighth note) ---
+      {
+        const capsule = (x1: number, y1: number, x2: number, y2: number, half: number) => {
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.lineWidth = half * 2;
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          ctx.stroke();
+        };
+        const traceAll = (pad: number, stroke: string, blur: number, dxo = 0, dyo = 0) => {
+          ctx.save();
+          ctx.translate(dxo, dyo);
+          ctx.strokeStyle = stroke;
+          ctx.shadowColor = stroke;
+          ctx.shadowBlur = blur;
+          for (const n of NOTE_SEGS) capsule(n.x1, n.y1, n.x2, n.y2, n.halfW + pad);
+          ctx.restore();
+        };
+
+        // drop shadow for volume
+        traceAll(1.5, "rgba(3,1,10,0.95)", 14, 4, 6);
+        // outer neon halo
+        traceAll(1, "hsla(320, 100%, 60%, 0.85)", 26);
+        // solid body with vertical volumetric gradient
+        const bodyG = ctx.createLinearGradient(NOTE_HEAD_X - 30, NOTE_STEM_TOP_Y, NOTE_HEAD_X + 60, NOTE_HEAD_Y);
+        bodyG.addColorStop(0, "hsl(330, 100%, 72%)");
+        bodyG.addColorStop(0.45, "hsl(320, 100%, 56%)");
+        bodyG.addColorStop(1, "hsl(300, 90%, 34%)");
+        ctx.save();
+        ctx.strokeStyle = bodyG as unknown as string;
+        ctx.shadowBlur = 0;
+        for (const n of NOTE_SEGS) capsule(n.x1, n.y1, n.x2, n.y2, n.halfW);
+        ctx.restore();
+        // beveled bright rim (upper-left light)
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.strokeStyle = "hsla(0,0%,100%,0.8)";
+        ctx.shadowBlur = 0;
+        for (const n of NOTE_SEGS) capsule(n.x1 - 1.5, n.y1 - 2, n.x2 - 1.5, n.y2 - 2, n.halfW * 0.42);
+        ctx.restore();
+        // specular highlight on the note head
+        ctx.save();
+        const spec = ctx.createRadialGradient(NOTE_HEAD_X - 8, NOTE_HEAD_Y - 7, 0, NOTE_HEAD_X - 8, NOTE_HEAD_Y - 7, 18);
+        spec.addColorStop(0, "hsla(0,0%,100%,0.65)");
+        spec.addColorStop(1, "hsla(0,0%,100%,0)");
+        ctx.fillStyle = spec;
+        ctx.beginPath();
+        ctx.ellipse(NOTE_HEAD_X - 8, NOTE_HEAD_Y - 7, 15, 9, NOTE_HEAD_TILT, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
       // launcher chute hint
+
 
       ctx.strokeStyle = "hsla(50, 100%, 60%, 0.4)";
       ctx.lineWidth = 1;
