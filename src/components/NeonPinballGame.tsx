@@ -3,6 +3,8 @@ import { Settings } from "lucide-react";
 import { toast } from "sonner";
 import GameOverLeaderboard from "@/components/GameOverLeaderboard";
 import pinballBg from "@/assets/pinball-bg.jpg";
+import { unlockAudio, sfxBumper, sfxClack, sfxFlipper, sfxLaunch, sfxDrain } from "@/lib/arcadeAudio";
+
 
 // ============================================================
 // NEON PINBALL — Phase 1.1: sealed walls, instant launch, bumpers
