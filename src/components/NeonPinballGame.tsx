@@ -501,7 +501,7 @@ const NeonPinballGame = () => {
         hitFlipper(PIVOT_R_X, PIVOT_Y, rx, ry, rightFlipRef.current.omega, -1);
 
 
-        for (const bm of bumpersRef.current) collideBumper(b, bm);
+        for (const bm of bumpersRef.current) { if (collideBumper(b, bm)) sfxBumper(); }
 
         // drain — only between flipper pivots
         if (b.y > DRAIN_Y && b.x > DRAIN_X_MIN && b.x < DRAIN_X_MAX) {
@@ -519,8 +519,10 @@ const NeonPinballGame = () => {
     };
 
     const onBallLost = () => {
+      sfxDrain(ballNumRef.current >= 3);
       if (ballNumRef.current >= 3) {
         if (scoreRef.current > highScore) {
+
           setHighScore(scoreRef.current);
           localStorage.setItem("neon-pinball-hi", String(scoreRef.current));
         }
