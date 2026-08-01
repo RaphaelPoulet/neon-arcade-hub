@@ -319,7 +319,9 @@ const NeonPinballGame = () => {
   }, []);
 
   const startGame = useCallback(() => {
+    unlockAudio();
     scoreRef.current = 0;
+
     ballNumRef.current = 1;
     setScore(0);
     setBallNum(1);
