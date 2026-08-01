@@ -89,14 +89,39 @@ const WALLS: Wall[] = [
   // --- Internal guide walls ---
   // Left slanted deflector (funnels toward left bumper)
   { x1: 30, y1: 190, x2: 78, y2: 300, halfW: INNER_HALF, accent: "cyan" },
-  // Right slanted deflector (funnels toward right bumper)
-  { x1: 405, y1: 200, x2: 360, y2: 305, halfW: INNER_HALF, accent: "magenta" },
+  // (right-side mid wall + lower diagonal replaced by the musical-note obstacle — see NOTE_*)
   // (central triangular obstacle is defined separately below — see TRI_*)
 
-  // Short guide rails above flippers to prevent easy drain along walls
+  // Short guide rail above the left flipper
   { x1: 60, y1: HEIGHT - 260, x2: 105, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "cyan" },
-  { x1: LANE_INNER_X - 20, y1: HEIGHT - 260, x2: LANE_INNER_X - 65, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "magenta" },
 ];
+
+// --- Right-side sculpted musical note obstacle (beamed eighth note, solid body) ---
+const NOTE_HEAD_X = 384;
+const NOTE_HEAD_Y = 604;
+const NOTE_HEAD_RX = 24;          // capsule half-length of the tilted note head
+const NOTE_HEAD_RY = 15;          // capsule radius (physical half-thickness)
+const NOTE_HEAD_TILT = -0.32;     // radians
+const NOTE_STEM_X = NOTE_HEAD_X + 21;
+const NOTE_STEM_TOP_Y = 408;
+const NOTE_STEM_BOT_Y = NOTE_HEAD_Y - 6;
+const NOTE_STEM_HALF = 6;
+const NOTE_BEAM_X2 = NOTE_STEM_X + 30;
+const NOTE_BEAM_Y2 = NOTE_STEM_TOP_Y + 30;
+const NOTE_BEAM_HALF = 8;
+// Head capsule endpoints (tilted)
+const NOTE_HEAD_AX = NOTE_HEAD_X - Math.cos(NOTE_HEAD_TILT) * (NOTE_HEAD_RX - NOTE_HEAD_RY);
+const NOTE_HEAD_AY = NOTE_HEAD_Y - Math.sin(NOTE_HEAD_TILT) * (NOTE_HEAD_RX - NOTE_HEAD_RY);
+const NOTE_HEAD_BX = NOTE_HEAD_X + Math.cos(NOTE_HEAD_TILT) * (NOTE_HEAD_RX - NOTE_HEAD_RY);
+const NOTE_HEAD_BY = NOTE_HEAD_Y + Math.sin(NOTE_HEAD_TILT) * (NOTE_HEAD_RX - NOTE_HEAD_RY);
+
+const NOTE_SEGS: { x1: number; y1: number; x2: number; y2: number; halfW: number }[] = [
+  { x1: NOTE_HEAD_AX, y1: NOTE_HEAD_AY, x2: NOTE_HEAD_BX, y2: NOTE_HEAD_BY, halfW: NOTE_HEAD_RY },
+  { x1: NOTE_STEM_X, y1: NOTE_STEM_TOP_Y, x2: NOTE_STEM_X, y2: NOTE_STEM_BOT_Y, halfW: NOTE_STEM_HALF },
+  { x1: NOTE_STEM_X, y1: NOTE_STEM_TOP_Y, x2: NOTE_BEAM_X2, y2: NOTE_BEAM_Y2, halfW: NOTE_BEAM_HALF },
+  { x1: NOTE_STEM_X, y1: NOTE_STEM_TOP_Y + 22, x2: NOTE_BEAM_X2, y2: NOTE_BEAM_Y2 + 22, halfW: NOTE_BEAM_HALF - 2 },
+];
+
 
 // --- Central sculpted triangular obstacle (solid body, rounded corners, curved edges) ---
 // Positioned well BELOW the central bumper (y 340, r 28) for a large clear gap.
