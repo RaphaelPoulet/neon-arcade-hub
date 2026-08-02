@@ -943,6 +943,59 @@ const NeonPinballGame = () => {
         ctx.restore();
       }
 
+      // --- Left-side sculpted G-clef obstacle (electric blue neon, volumetric) ---
+      {
+        const tracePath = (pad: number) => {
+          ctx.beginPath();
+          ctx.moveTo(CLEF_PTS[0][0], CLEF_PTS[0][1]);
+          for (let i = 1; i < CLEF_PTS.length - 1; i++) {
+            const [x, y] = CLEF_PTS[i];
+            const [nx, ny] = CLEF_PTS[i + 1];
+            ctx.quadraticCurveTo(x, y, (x + nx) / 2, (y + ny) / 2);
+          }
+          const last = CLEF_PTS[CLEF_PTS.length - 1];
+          ctx.lineTo(last[0], last[1]);
+          ctx.lineWidth = (CLEF_HALF + pad) * 2;
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          ctx.stroke();
+        };
+        const layer = (pad: number, stroke: string, blur: number, dxo = 0, dyo = 0) => {
+          ctx.save();
+          ctx.translate(dxo, dyo);
+          ctx.strokeStyle = stroke;
+          ctx.shadowColor = stroke;
+          ctx.shadowBlur = blur;
+          tracePath(pad);
+          ctx.restore();
+        };
+
+        // drop shadow for volume
+        layer(1.5, "rgba(2,6,18,0.95)", 14, 4, 6);
+        // outer electric-blue halo
+        layer(1, "hsla(195, 100%, 60%, 0.85)", 26);
+        // solid body with volumetric gradient
+        const clefG = ctx.createLinearGradient(CLEF_X - 20, CLEF_Y, CLEF_X + 40, CLEF_Y + 110);
+        clefG.addColorStop(0, "hsl(190, 100%, 78%)");
+        clefG.addColorStop(0.45, "hsl(198, 100%, 58%)");
+        clefG.addColorStop(1, "hsl(212, 90%, 36%)");
+        ctx.save();
+        ctx.strokeStyle = clefG as unknown as string;
+        ctx.shadowBlur = 0;
+        tracePath(0);
+        ctx.restore();
+        // beveled bright rim (upper-left light)
+        ctx.save();
+        ctx.globalAlpha = 0.65;
+        ctx.translate(-1.5, -2);
+        ctx.strokeStyle = "hsla(0,0%,100%,0.8)";
+        ctx.shadowBlur = 0;
+        tracePath(-CLEF_HALF * 0.58);
+        ctx.restore();
+      }
+
+
+
       // launcher chute hint
 
 
