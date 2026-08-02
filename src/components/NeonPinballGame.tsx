@@ -95,10 +95,10 @@ const WALLS: Wall[] = [
 ];
 
 // --- Left-side sculpted G-clef (treble clef) obstacle: solid body, electric blue neon ---
-const CLEF_X = 62;
-const CLEF_Y = 250;
-const CLEF_SCALE = 1;
-const CLEF_HALF = 5; // physical half-thickness of the clef stroke
+const CLEF_X = 92;
+const CLEF_Y = 300;
+const CLEF_SCALE = 2;
+const CLEF_HALF = 9; // physical half-thickness of the clef stroke (scaled up)
 const CLEF_LOCAL: [number, number][] = [
   [10, 58], [-2, 66], [-14, 56], [-8, 42], [6, 36],
   [22, 28], [30, 14], [22, 2], [12, 6], [8, 20],
