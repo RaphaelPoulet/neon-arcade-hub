@@ -89,14 +89,35 @@ const WALLS: Wall[] = [
   { x1: LANE_INNER_X, y1: HEIGHT - 200, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y, halfW: WALL_HALF, accent: "magenta" },
 
   // --- Internal guide walls ---
-  // Left slanted deflector (funnels toward left bumper)
-  { x1: 30, y1: 190, x2: 78, y2: 300, halfW: INNER_HALF, accent: "cyan" },
+  // (left slanted deflector + left flipper guide rail replaced by the G-clef obstacle — see CLEF_*)
   // (right-side mid wall + lower diagonal replaced by the musical-note obstacle — see NOTE_*)
   // (central triangular obstacle is defined separately below — see TRI_*)
-
-  // Short guide rail above the left flipper
-  { x1: 60, y1: HEIGHT - 260, x2: 105, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "cyan" },
 ];
+
+// --- Left-side sculpted G-clef (treble clef) obstacle: solid body, electric blue neon ---
+const CLEF_X = 62;
+const CLEF_Y = 250;
+const CLEF_SCALE = 1;
+const CLEF_HALF = 5; // physical half-thickness of the clef stroke
+const CLEF_LOCAL: [number, number][] = [
+  [10, 58], [-2, 66], [-14, 56], [-8, 42], [6, 36],
+  [22, 28], [30, 14], [22, 2], [12, 6], [8, 20],
+  [8, 60], [8, 96], [4, 108], [-8, 106], [-14, 96],
+  [-8, 86], [2, 88], [6, 96],
+];
+const CLEF_PTS: [number, number][] = CLEF_LOCAL.map(([x, y]) => [
+  CLEF_X + x * CLEF_SCALE,
+  CLEF_Y + y * CLEF_SCALE,
+]);
+const CLEF_SEGS: { x1: number; y1: number; x2: number; y2: number; halfW: number }[] = [];
+for (let i = 0; i < CLEF_PTS.length - 1; i++) {
+  CLEF_SEGS.push({
+    x1: CLEF_PTS[i][0], y1: CLEF_PTS[i][1],
+    x2: CLEF_PTS[i + 1][0], y2: CLEF_PTS[i + 1][1],
+    halfW: CLEF_HALF,
+  });
+}
+
 
 // --- Right-side sculpted musical note obstacle (beamed eighth note, solid body) ---
 // Base (unrotated) geometry, then moved up/left and rotated counter-clockwise.
