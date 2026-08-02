@@ -68,7 +68,7 @@ const BUMPERS_INIT: Bumper[] = [
 // --- Walls ---
 interface Wall { x1: number; y1: number; x2: number; y2: number; halfW?: number; accent?: "cyan" | "magenta"; }
 const WALL_HALF = 10; // physical half-thickness for outer walls (thickened for premium cabinet feel)
-const INNER_HALF = 7;
+
 const WALLS: Wall[] = [
   // outer left
   { x1: 0, y1: 0, x2: 0, y2: HEIGHT, halfW: WALL_HALF, accent: "cyan" },
