@@ -74,10 +74,10 @@ const WALLS: Wall[] = [
   { x1: 0, y1: 0, x2: 0, y2: HEIGHT, halfW: WALL_HALF, accent: "cyan" },
   // outer right
   { x1: WIDTH, y1: 0, x2: WIDTH, y2: HEIGHT, halfW: WALL_HALF, accent: "magenta" },
-  // top arch
-  { x1: 0, y1: 120, x2: 90, y2: 40, halfW: WALL_HALF, accent: "cyan" },
-  { x1: 90, y1: 40, x2: WIDTH - 90, y2: 40, halfW: WALL_HALF, accent: "cyan" },
-  { x1: WIDTH - 90, y1: 40, x2: WIDTH, y2: 120, halfW: WALL_HALF, accent: "magenta" },
+  // top arch (raised so the AXE COMMANDER title sits inside the framed playfield)
+  { x1: 0, y1: 86, x2: 90, y2: 12, halfW: WALL_HALF, accent: "cyan" },
+  { x1: 90, y1: 12, x2: WIDTH - 90, y2: 12, halfW: WALL_HALF, accent: "cyan" },
+  { x1: WIDTH - 90, y1: 12, x2: WIDTH, y2: 86, halfW: WALL_HALF, accent: "magenta" },
   // launcher inner wall (full lane, top to bottom)
   { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y, halfW: WALL_HALF, accent: "magenta" },
   // bottom-left slope: from outer wall directly to left pivot (sealed)
@@ -95,10 +95,10 @@ const WALLS: Wall[] = [
 ];
 
 // --- Left-side sculpted G-clef (treble clef) obstacle: solid body, electric blue neon ---
-const CLEF_X = 62;
-const CLEF_Y = 250;
-const CLEF_SCALE = 1;
-const CLEF_HALF = 5; // physical half-thickness of the clef stroke
+const CLEF_X = 92;
+const CLEF_Y = 300;
+const CLEF_SCALE = 2;
+const CLEF_HALF = 9; // physical half-thickness of the clef stroke (scaled up)
 const CLEF_LOCAL: [number, number][] = [
   [10, 58], [-2, 66], [-14, 56], [-8, 42], [6, 36],
   [22, 28], [30, 14], [22, 2], [12, 6], [8, 20],
@@ -975,7 +975,7 @@ const NeonPinballGame = () => {
         // outer electric-blue halo
         layer(1, "hsla(195, 100%, 60%, 0.85)", 26);
         // solid body with volumetric gradient
-        const clefG = ctx.createLinearGradient(CLEF_X - 20, CLEF_Y, CLEF_X + 40, CLEF_Y + 110);
+        const clefG = ctx.createLinearGradient(CLEF_X - 20 * CLEF_SCALE, CLEF_Y, CLEF_X + 40 * CLEF_SCALE, CLEF_Y + 110 * CLEF_SCALE);
         clefG.addColorStop(0, "hsl(190, 100%, 78%)");
         clefG.addColorStop(0.45, "hsl(198, 100%, 58%)");
         clefG.addColorStop(1, "hsl(212, 90%, 36%)");
