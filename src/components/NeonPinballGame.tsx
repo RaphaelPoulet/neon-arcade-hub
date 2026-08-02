@@ -515,6 +515,14 @@ const NeonPinballGame = () => {
             scoreRef.current += 25;
           }
         }
+
+        // Left-side solid G-clef obstacle
+        for (const c of CLEF_SEGS) {
+          if (collideSeg(b, c.x1, c.y1, c.x2, c.y2, RESTITUTION, undefined, c.halfW)) {
+            clacked = true;
+            scoreRef.current += 25;
+          }
+        }
         if (clacked && spBefore > 120) sfxClack(Math.min(1, spBefore / 1200));
 
 
