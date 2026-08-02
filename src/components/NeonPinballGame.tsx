@@ -74,10 +74,10 @@ const WALLS: Wall[] = [
   { x1: 0, y1: 0, x2: 0, y2: HEIGHT, halfW: WALL_HALF, accent: "cyan" },
   // outer right
   { x1: WIDTH, y1: 0, x2: WIDTH, y2: HEIGHT, halfW: WALL_HALF, accent: "magenta" },
-  // top arch
-  { x1: 0, y1: 120, x2: 90, y2: 40, halfW: WALL_HALF, accent: "cyan" },
-  { x1: 90, y1: 40, x2: WIDTH - 90, y2: 40, halfW: WALL_HALF, accent: "cyan" },
-  { x1: WIDTH - 90, y1: 40, x2: WIDTH, y2: 120, halfW: WALL_HALF, accent: "magenta" },
+  // top arch (raised so the AXE COMMANDER title sits inside the framed playfield)
+  { x1: 0, y1: 86, x2: 90, y2: 12, halfW: WALL_HALF, accent: "cyan" },
+  { x1: 90, y1: 12, x2: WIDTH - 90, y2: 12, halfW: WALL_HALF, accent: "cyan" },
+  { x1: WIDTH - 90, y1: 12, x2: WIDTH, y2: 86, halfW: WALL_HALF, accent: "magenta" },
   // launcher inner wall (full lane, top to bottom)
   { x1: LANE_INNER_X, y1: LANE_TOP_Y, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y, halfW: WALL_HALF, accent: "magenta" },
   // bottom-left slope: from outer wall directly to left pivot (sealed)
