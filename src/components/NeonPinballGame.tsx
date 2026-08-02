@@ -975,7 +975,7 @@ const NeonPinballGame = () => {
         // outer electric-blue halo
         layer(1, "hsla(195, 100%, 60%, 0.85)", 26);
         // solid body with volumetric gradient
-        const clefG = ctx.createLinearGradient(CLEF_X - 20, CLEF_Y, CLEF_X + 40, CLEF_Y + 110);
+        const clefG = ctx.createLinearGradient(CLEF_X - 20 * CLEF_SCALE, CLEF_Y, CLEF_X + 40 * CLEF_SCALE, CLEF_Y + 110 * CLEF_SCALE);
         clefG.addColorStop(0, "hsl(190, 100%, 78%)");
         clefG.addColorStop(0.45, "hsl(198, 100%, 58%)");
         clefG.addColorStop(1, "hsl(212, 90%, 36%)");
