@@ -68,7 +68,7 @@ const BUMPERS_INIT: Bumper[] = [
 // --- Walls ---
 interface Wall { x1: number; y1: number; x2: number; y2: number; halfW?: number; accent?: "cyan" | "magenta"; }
 const WALL_HALF = 10; // physical half-thickness for outer walls (thickened for premium cabinet feel)
-const INNER_HALF = 7;
+
 const WALLS: Wall[] = [
   // outer left
   { x1: 0, y1: 0, x2: 0, y2: HEIGHT, halfW: WALL_HALF, accent: "cyan" },
@@ -89,14 +89,35 @@ const WALLS: Wall[] = [
   { x1: LANE_INNER_X, y1: HEIGHT - 200, x2: LANE_INNER_X, y2: LANE_BOTTOM_Y, halfW: WALL_HALF, accent: "magenta" },
 
   // --- Internal guide walls ---
-  // Left slanted deflector (funnels toward left bumper)
-  { x1: 30, y1: 190, x2: 78, y2: 300, halfW: INNER_HALF, accent: "cyan" },
+  // (left slanted deflector + left flipper guide rail replaced by the G-clef obstacle — see CLEF_*)
   // (right-side mid wall + lower diagonal replaced by the musical-note obstacle — see NOTE_*)
   // (central triangular obstacle is defined separately below — see TRI_*)
-
-  // Short guide rail above the left flipper
-  { x1: 60, y1: HEIGHT - 260, x2: 105, y2: HEIGHT - 210, halfW: INNER_HALF, accent: "cyan" },
 ];
+
+// --- Left-side sculpted G-clef (treble clef) obstacle: solid body, electric blue neon ---
+const CLEF_X = 62;
+const CLEF_Y = 250;
+const CLEF_SCALE = 1;
+const CLEF_HALF = 5; // physical half-thickness of the clef stroke
+const CLEF_LOCAL: [number, number][] = [
+  [10, 58], [-2, 66], [-14, 56], [-8, 42], [6, 36],
+  [22, 28], [30, 14], [22, 2], [12, 6], [8, 20],
+  [8, 60], [8, 96], [4, 108], [-8, 106], [-14, 96],
+  [-8, 86], [2, 88], [6, 96],
+];
+const CLEF_PTS: [number, number][] = CLEF_LOCAL.map(([x, y]) => [
+  CLEF_X + x * CLEF_SCALE,
+  CLEF_Y + y * CLEF_SCALE,
+]);
+const CLEF_SEGS: { x1: number; y1: number; x2: number; y2: number; halfW: number }[] = [];
+for (let i = 0; i < CLEF_PTS.length - 1; i++) {
+  CLEF_SEGS.push({
+    x1: CLEF_PTS[i][0], y1: CLEF_PTS[i][1],
+    x2: CLEF_PTS[i + 1][0], y2: CLEF_PTS[i + 1][1],
+    halfW: CLEF_HALF,
+  });
+}
+
 
 // --- Right-side sculpted musical note obstacle (beamed eighth note, solid body) ---
 // Base (unrotated) geometry, then moved up/left and rotated counter-clockwise.
@@ -490,6 +511,14 @@ const NeonPinballGame = () => {
         // Right-side solid musical note obstacle
         for (const n of NOTE_SEGS) {
           if (collideSeg(b, n.x1, n.y1, n.x2, n.y2, RESTITUTION, undefined, n.halfW)) {
+            clacked = true;
+            scoreRef.current += 25;
+          }
+        }
+
+        // Left-side solid G-clef obstacle
+        for (const c of CLEF_SEGS) {
+          if (collideSeg(b, c.x1, c.y1, c.x2, c.y2, RESTITUTION, undefined, c.halfW)) {
             clacked = true;
             scoreRef.current += 25;
           }
@@ -913,6 +942,59 @@ const NeonPinballGame = () => {
         ctx.fill();
         ctx.restore();
       }
+
+      // --- Left-side sculpted G-clef obstacle (electric blue neon, volumetric) ---
+      {
+        const tracePath = (pad: number) => {
+          ctx.beginPath();
+          ctx.moveTo(CLEF_PTS[0][0], CLEF_PTS[0][1]);
+          for (let i = 1; i < CLEF_PTS.length - 1; i++) {
+            const [x, y] = CLEF_PTS[i];
+            const [nx, ny] = CLEF_PTS[i + 1];
+            ctx.quadraticCurveTo(x, y, (x + nx) / 2, (y + ny) / 2);
+          }
+          const last = CLEF_PTS[CLEF_PTS.length - 1];
+          ctx.lineTo(last[0], last[1]);
+          ctx.lineWidth = (CLEF_HALF + pad) * 2;
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          ctx.stroke();
+        };
+        const layer = (pad: number, stroke: string, blur: number, dxo = 0, dyo = 0) => {
+          ctx.save();
+          ctx.translate(dxo, dyo);
+          ctx.strokeStyle = stroke;
+          ctx.shadowColor = stroke;
+          ctx.shadowBlur = blur;
+          tracePath(pad);
+          ctx.restore();
+        };
+
+        // drop shadow for volume
+        layer(1.5, "rgba(2,6,18,0.95)", 14, 4, 6);
+        // outer electric-blue halo
+        layer(1, "hsla(195, 100%, 60%, 0.85)", 26);
+        // solid body with volumetric gradient
+        const clefG = ctx.createLinearGradient(CLEF_X - 20, CLEF_Y, CLEF_X + 40, CLEF_Y + 110);
+        clefG.addColorStop(0, "hsl(190, 100%, 78%)");
+        clefG.addColorStop(0.45, "hsl(198, 100%, 58%)");
+        clefG.addColorStop(1, "hsl(212, 90%, 36%)");
+        ctx.save();
+        ctx.strokeStyle = clefG as unknown as string;
+        ctx.shadowBlur = 0;
+        tracePath(0);
+        ctx.restore();
+        // beveled bright rim (upper-left light)
+        ctx.save();
+        ctx.globalAlpha = 0.65;
+        ctx.translate(-1.5, -2);
+        ctx.strokeStyle = "hsla(0,0%,100%,0.8)";
+        ctx.shadowBlur = 0;
+        tracePath(-CLEF_HALF * 0.58);
+        ctx.restore();
+      }
+
+
 
       // launcher chute hint
 
