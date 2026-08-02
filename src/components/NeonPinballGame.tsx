@@ -99,30 +99,56 @@ const WALLS: Wall[] = [
 ];
 
 // --- Right-side sculpted musical note obstacle (beamed eighth note, solid body) ---
-const NOTE_HEAD_X = 384;
-const NOTE_HEAD_Y = 604;
+// Base (unrotated) geometry, then moved up/left and rotated counter-clockwise.
+const NOTE_OFFSET_X = -46;        // shift left
+const NOTE_OFFSET_Y = -96;        // shift up
+const NOTE_ROT = -0.30;           // counter-clockwise tilt (radians)
+const NOTE_BASE_HEAD_X = 384;
+const NOTE_BASE_HEAD_Y = 604;
 const NOTE_HEAD_RX = 24;          // capsule half-length of the tilted note head
 const NOTE_HEAD_RY = 15;          // capsule radius (physical half-thickness)
-const NOTE_HEAD_TILT = -0.32;     // radians
-const NOTE_STEM_X = NOTE_HEAD_X + 21;
+const NOTE_BASE_TILT = -0.32;     // radians
+const NOTE_HEAD_TILT = NOTE_BASE_TILT + NOTE_ROT;
+const NOTE_STEM_X = NOTE_BASE_HEAD_X + 21;
 const NOTE_STEM_TOP_Y = 408;
-const NOTE_STEM_BOT_Y = NOTE_HEAD_Y - 6;
+const NOTE_STEM_BOT_Y = NOTE_BASE_HEAD_Y - 6;
 const NOTE_STEM_HALF = 6;
 const NOTE_BEAM_X2 = NOTE_STEM_X + 30;
 const NOTE_BEAM_Y2 = NOTE_STEM_TOP_Y + 30;
 const NOTE_BEAM_HALF = 8;
+
+// Rotate around the base head centre, then translate
+const noteXf = (x: number, y: number): [number, number] => {
+  const dx = x - NOTE_BASE_HEAD_X;
+  const dy = y - NOTE_BASE_HEAD_Y;
+  const c = Math.cos(NOTE_ROT);
+  const s = Math.sin(NOTE_ROT);
+  return [
+    NOTE_BASE_HEAD_X + dx * c - dy * s + NOTE_OFFSET_X,
+    NOTE_BASE_HEAD_Y + dx * s + dy * c + NOTE_OFFSET_Y,
+  ];
+};
+
+const [NOTE_HEAD_X, NOTE_HEAD_Y] = noteXf(NOTE_BASE_HEAD_X, NOTE_BASE_HEAD_Y);
 // Head capsule endpoints (tilted)
 const NOTE_HEAD_AX = NOTE_HEAD_X - Math.cos(NOTE_HEAD_TILT) * (NOTE_HEAD_RX - NOTE_HEAD_RY);
 const NOTE_HEAD_AY = NOTE_HEAD_Y - Math.sin(NOTE_HEAD_TILT) * (NOTE_HEAD_RX - NOTE_HEAD_RY);
 const NOTE_HEAD_BX = NOTE_HEAD_X + Math.cos(NOTE_HEAD_TILT) * (NOTE_HEAD_RX - NOTE_HEAD_RY);
 const NOTE_HEAD_BY = NOTE_HEAD_Y + Math.sin(NOTE_HEAD_TILT) * (NOTE_HEAD_RX - NOTE_HEAD_RY);
 
+const noteSeg = (x1: number, y1: number, x2: number, y2: number, halfW: number) => {
+  const [ax, ay] = noteXf(x1, y1);
+  const [bx, by] = noteXf(x2, y2);
+  return { x1: ax, y1: ay, x2: bx, y2: by, halfW };
+};
+
 const NOTE_SEGS: { x1: number; y1: number; x2: number; y2: number; halfW: number }[] = [
   { x1: NOTE_HEAD_AX, y1: NOTE_HEAD_AY, x2: NOTE_HEAD_BX, y2: NOTE_HEAD_BY, halfW: NOTE_HEAD_RY },
-  { x1: NOTE_STEM_X, y1: NOTE_STEM_TOP_Y, x2: NOTE_STEM_X, y2: NOTE_STEM_BOT_Y, halfW: NOTE_STEM_HALF },
-  { x1: NOTE_STEM_X, y1: NOTE_STEM_TOP_Y, x2: NOTE_BEAM_X2, y2: NOTE_BEAM_Y2, halfW: NOTE_BEAM_HALF },
-  { x1: NOTE_STEM_X, y1: NOTE_STEM_TOP_Y + 22, x2: NOTE_BEAM_X2, y2: NOTE_BEAM_Y2 + 22, halfW: NOTE_BEAM_HALF - 2 },
+  noteSeg(NOTE_STEM_X, NOTE_STEM_TOP_Y, NOTE_STEM_X, NOTE_STEM_BOT_Y, NOTE_STEM_HALF),
+  noteSeg(NOTE_STEM_X, NOTE_STEM_TOP_Y, NOTE_BEAM_X2, NOTE_BEAM_Y2, NOTE_BEAM_HALF),
+  noteSeg(NOTE_STEM_X, NOTE_STEM_TOP_Y + 22, NOTE_BEAM_X2, NOTE_BEAM_Y2 + 22, NOTE_BEAM_HALF - 2),
 ];
+
 
 
 // --- Central sculpted triangular obstacle (solid body, rounded corners, curved edges) ---
