@@ -34,8 +34,10 @@ const App = () => (
           <Route path="/game/neon-pinball" element={<NeonPinballPage />} />
           <Route path="/game/:slug" element={<GamePage />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        <MusicPlayer />
       </BrowserRouter>
     </TooltipProvider>
     </AuthProvider>

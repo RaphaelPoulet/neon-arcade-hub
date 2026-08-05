@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
-import { Trophy, User, Gamepad2, LogOut } from "lucide-react";
+import { Trophy, User, Gamepad2, LogOut, Music2 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import AuthModal from "@/components/AuthModal";
 
 const Navbar = () => {
-  const { user, username, signOut } = useAuth();
+  const { user, username, isAdmin, signOut } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
 
   return (
