@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
-import { Trophy, User, Gamepad2, LogOut } from "lucide-react";
+import { Trophy, User, Gamepad2, LogOut, Music2 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import AuthModal from "@/components/AuthModal";
 
 const Navbar = () => {
-  const { user, username, signOut } = useAuth();
+  const { user, username, isAdmin, signOut } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
 
   return (
@@ -27,6 +27,18 @@ const Navbar = () => {
               <Trophy className="w-4 h-4" />
               <span className="hidden sm:inline">Leaderboard</span>
             </Link>
+
+            {isAdmin && (
+              <Link
+                to="/admin"
+                className="flex items-center gap-2 text-muted-foreground hover:text-secondary transition-colors text-sm"
+              >
+                <Music2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Music Admin</span>
+              </Link>
+            )}
+
+
 
             {user ? (
               <div className="flex items-center gap-2">

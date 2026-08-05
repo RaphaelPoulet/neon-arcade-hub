@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 interface AuthState {
   user: User | null;
   username: string | null;
+  isAdmin: boolean;
   loading: boolean;
   signUp: (username: string, password: string) => Promise<string | null>;
   signIn: (username: string, password: string) => Promise<string | null>;
@@ -22,6 +23,7 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [username, setUsername] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchUsername = async (userId: string) => {
@@ -33,14 +35,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUsername(data?.username ?? null);
   };
 
+  const fetchRole = async (userId: string) => {
+    const { data } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    setIsAdmin(!!data);
+  };
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const u = session?.user ?? null;
       setUser(u);
       if (u) {
-        setTimeout(() => fetchUsername(u.id), 0);
+        setTimeout(() => { fetchUsername(u.id); fetchRole(u.id); }, 0);
       } else {
         setUsername(null);
+        setIsAdmin(false);
       }
       setLoading(false);
     });
@@ -48,7 +61,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       const u = session?.user ?? null;
       setUser(u);
-      if (u) fetchUsername(u.id);
+      if (u) { fetchUsername(u.id); fetchRole(u.id); }
       setLoading(false);
     });
 
@@ -102,10 +115,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await supabase.auth.signOut();
     setUser(null);
     setUsername(null);
+    setIsAdmin(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, username, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, username, isAdmin, loading, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

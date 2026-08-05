@@ -12,6 +12,8 @@ import PhantomMazePage from "./pages/CyberManPage";
 import SuperKartPage from "./pages/SuperKartPage";
 import NeonPinballPage from "./pages/NeonPinballPage";
 import Leaderboard from "./pages/Leaderboard";
+import Admin from "./pages/Admin";
+import MusicPlayer from "./components/MusicPlayer";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,8 +34,10 @@ const App = () => (
           <Route path="/game/neon-pinball" element={<NeonPinballPage />} />
           <Route path="/game/:slug" element={<GamePage />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        <MusicPlayer />
       </BrowserRouter>
     </TooltipProvider>
     </AuthProvider>
