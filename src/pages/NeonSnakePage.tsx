@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import NeonSnakeGame from "@/components/NeonSnakeGame";
+import GameLeaderboardPanel from "@/components/GameLeaderboardPanel";
 
 const NeonSnakePage = () => {
   return (
@@ -23,7 +24,12 @@ const NeonSnakePage = () => {
             </p>
           </div>
 
-          <NeonSnakeGame />
+          <div className="flex flex-col lg:flex-row gap-6 items-start justify-center">
+            <div className="flex-1 min-w-0 w-full">
+              <NeonSnakeGame />
+            </div>
+            <GameLeaderboardPanel gameId="snake" />
+          </div>
 
           <div className="text-center mt-8">
             <Link

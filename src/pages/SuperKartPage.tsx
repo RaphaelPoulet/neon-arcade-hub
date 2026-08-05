@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import SuperKartGame from "@/components/SuperKartGame";
+import GameLeaderboardPanel from "@/components/GameLeaderboardPanel";
 
 const SuperKartPage = () => {
   return (
@@ -23,7 +24,12 @@ const SuperKartPage = () => {
             </p>
           </div>
 
-          <SuperKartGame />
+          <div className="flex flex-col lg:flex-row gap-6 items-start justify-center">
+            <div className="flex-1 min-w-0 w-full">
+              <SuperKartGame />
+            </div>
+            <GameLeaderboardPanel gameId="racer" />
+          </div>
 
           <div className="text-center mt-8">
             <Link to="/" className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors text-sm">

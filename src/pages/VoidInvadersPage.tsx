@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import VoidInvadersGame from "@/components/VoidInvadersGame";
+import GameLeaderboardPanel from "@/components/GameLeaderboardPanel";
 
 const VoidInvadersPage = () => {
   return (
@@ -23,7 +24,12 @@ const VoidInvadersPage = () => {
             </p>
           </div>
 
-          <VoidInvadersGame />
+          <div className="flex flex-col lg:flex-row gap-6 items-start justify-center">
+            <div className="flex-1 min-w-0 w-full">
+              <VoidInvadersGame />
+            </div>
+            <GameLeaderboardPanel gameId="invaders" />
+          </div>
 
           <div className="text-center mt-8">
             <Link
