@@ -115,10 +115,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await supabase.auth.signOut();
     setUser(null);
     setUsername(null);
+    setIsAdmin(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, username, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, username, isAdmin, loading, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
