@@ -50,9 +50,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const u = session?.user ?? null;
       setUser(u);
       if (u) {
-        setTimeout(() => fetchUsername(u.id), 0);
+        setTimeout(() => { fetchUsername(u.id); fetchRole(u.id); }, 0);
       } else {
         setUsername(null);
+        setIsAdmin(false);
       }
       setLoading(false);
     });
@@ -60,7 +61,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       const u = session?.user ?? null;
       setUser(u);
-      if (u) fetchUsername(u.id);
+      if (u) { fetchUsername(u.id); fetchRole(u.id); }
       setLoading(false);
     });
 
