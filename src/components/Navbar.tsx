@@ -28,6 +28,18 @@ const Navbar = () => {
               <span className="hidden sm:inline">Leaderboard</span>
             </Link>
 
+            {isAdmin && (
+              <Link
+                to="/admin"
+                className="flex items-center gap-2 text-muted-foreground hover:text-secondary transition-colors text-sm"
+              >
+                <Music2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Music Admin</span>
+              </Link>
+            )}
+
+
+
             {user ? (
               <div className="flex items-center gap-2">
                 <div className="glass rounded-full px-3 py-1.5 flex items-center gap-2">
