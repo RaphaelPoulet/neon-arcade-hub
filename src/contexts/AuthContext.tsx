@@ -23,6 +23,7 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [username, setUsername] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchUsername = async (userId: string) => {
@@ -32,6 +33,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .eq("user_id", userId)
       .single();
     setUsername(data?.username ?? null);
+  };
+
+  const fetchRole = async (userId: string) => {
+    const { data } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    setIsAdmin(!!data);
   };
 
   useEffect(() => {
