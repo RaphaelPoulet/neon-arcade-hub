@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 interface AuthState {
   user: User | null;
   username: string | null;
+  isAdmin: boolean;
   loading: boolean;
   signUp: (username: string, password: string) => Promise<string | null>;
   signIn: (username: string, password: string) => Promise<string | null>;
