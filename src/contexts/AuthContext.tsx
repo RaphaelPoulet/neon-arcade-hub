@@ -20,10 +20,16 @@ export const useAuth = () => {
   return ctx;
 };
 
+const LOCAL_ADMIN_KEY = "retro-arcade-local-admin";
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [username, setUsername] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [roleAdmin, setIsAdmin] = useState(false);
+  const [localAdmin, setLocalAdmin] = useState(
+    () => typeof localStorage !== "undefined" && localStorage.getItem(LOCAL_ADMIN_KEY) === "1"
+  );
+  const isAdmin = roleAdmin || localAdmin;
   const [loading, setLoading] = useState(true);
 
   const fetchUsername = async (userId: string) => {
