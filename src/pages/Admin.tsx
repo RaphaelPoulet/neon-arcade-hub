@@ -80,7 +80,7 @@ const Admin = () => {
 
         {loading ? (
           <p className="font-pixel text-[10px] text-muted-foreground">LOADING...</p>
-        ) : !user || !isAdmin ? (
+        ) : !isAdmin ? (
           <div className="glass rounded-xl p-6 border border-border/50 text-center">
             <p className="font-pixel text-[10px] text-destructive mb-2">ACCESS DENIED</p>
             <p className="text-sm text-muted-foreground">
