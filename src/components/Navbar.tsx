@@ -42,16 +42,23 @@ const Navbar = () => {
 
             {user ? (
               <div className="flex items-center gap-2">
+                {isAdmin && (
+                  <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-green-400/50 bg-green-400/10 px-2.5 py-1 font-pixel text-[8px] text-green-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                    ADMIN MODE ACTIVE
+                  </span>
+                )}
                 <div className="glass rounded-full px-3 py-1.5 flex items-center gap-2">
                   <User className="w-4 h-4 text-primary" />
                   <span className="hidden sm:inline text-sm text-foreground">{username}</span>
                 </div>
                 <button
                   onClick={signOut}
-                  className="glass rounded-full p-1.5 text-muted-foreground hover:text-destructive transition-colors"
+                  className="glass rounded-full px-3 py-1.5 flex items-center gap-2 text-muted-foreground hover:text-destructive transition-colors"
                   title="Log out"
                 >
                   <LogOut className="w-4 h-4" />
+                  <span className="hidden sm:inline text-sm">Logout</span>
                 </button>
               </div>
             ) : (

@@ -20,10 +20,16 @@ export const useAuth = () => {
   return ctx;
 };
 
+const LOCAL_ADMIN_KEY = "retro-arcade-local-admin";
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [username, setUsername] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [roleAdmin, setIsAdmin] = useState(false);
+  const [localAdmin, setLocalAdmin] = useState(
+    () => typeof localStorage !== "undefined" && localStorage.getItem(LOCAL_ADMIN_KEY) === "1"
+  );
+  const isAdmin = roleAdmin || localAdmin;
   const [loading, setLoading] = useState(true);
 
   const fetchUsername = async (userId: string) => {
@@ -103,6 +109,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signIn = async (uname: string, password: string): Promise<string | null> => {
     const trimmed = uname.trim();
+
+    // Simple local admin shortcut (UI-level only — the backend still enforces real roles)
+    if (trimmed.toLowerCase() === "admin" && password === "admin") {
+      localStorage.setItem(LOCAL_ADMIN_KEY, "1");
+      setLocalAdmin(true);
+      setUsername("admin");
+      return null;
+    }
+
     const { error } = await supabase.auth.signInWithPassword({
       email: fakeEmail(trimmed),
       password,
@@ -112,6 +127,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signOut = async () => {
+    localStorage.removeItem(LOCAL_ADMIN_KEY);
+    setLocalAdmin(false);
     await supabase.auth.signOut();
     setUser(null);
     setUsername(null);
@@ -119,7 +136,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, username, isAdmin, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user: user ?? (localAdmin ? ({ id: "local-admin" } as User) : null), username: username ?? (localAdmin ? "admin" : null), isAdmin, loading, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
