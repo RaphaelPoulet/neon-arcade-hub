@@ -15,7 +15,7 @@ interface Track {
 }
 
 const Admin = () => {
-  const { user, isAdmin, loading } = useAuth();
+  const { isAdmin, loading } = useAuth();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
