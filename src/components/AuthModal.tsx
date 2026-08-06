@@ -70,8 +70,7 @@ const AuthModal = ({ open, onClose }: AuthModalProps) => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              placeholder="Min 6 characters"
-              minLength={6}
+              placeholder={mode === "login" ? "Enter password" : "Min 6 characters"}
               autoComplete={mode === "login" ? "current-password" : "new-password"}
             />
           </div>
