@@ -168,12 +168,77 @@ const Admin = () => {
               {tracks.length === 0 ? (
                 <p className="font-pixel text-[10px] text-muted-foreground text-center">PLAYLIST EMPTY</p>
               ) : (
-                tracks.map((t) => (
-                  <div key={t.id} className="glass rounded-lg p-3 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm text-foreground truncate">{t.title}</p>
+                tracks.map((t, i) => (
+                  <div key={t.id} className="glass rounded-lg p-3 flex items-center gap-3">
+                    <div className="flex flex-col shrink-0">
+                      <button
+                        onClick={() => move(i, -1)}
+                        disabled={i === 0}
+                        title="Move up"
+                        className="text-muted-foreground hover:text-primary transition-colors disabled:opacity-25"
+                      >
+                        <ArrowUp className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => move(i, 1)}
+                        disabled={i === tracks.length - 1}
+                        title="Move down"
+                        className="text-muted-foreground hover:text-primary transition-colors disabled:opacity-25"
+                      >
+                        <ArrowDown className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <span className="font-pixel text-[9px] text-primary shrink-0 w-6">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      {editingId === t.id ? (
+                        <input
+                          autoFocus
+                          value={editTitle}
+                          maxLength={120}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveTitle(t);
+                            if (e.key === "Escape") setEditingId(null);
+                          }}
+                          className="w-full bg-muted/50 border border-primary/60 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                      ) : (
+                        <p className="text-sm text-foreground truncate">{t.title}</p>
+                      )}
                       <p className="text-[10px] text-muted-foreground truncate">{t.url}</p>
                     </div>
+
+                    {editingId === t.id ? (
+                      <>
+                        <button
+                          onClick={() => saveTitle(t)}
+                          className="text-muted-foreground hover:text-primary transition-colors shrink-0"
+                          title="Save title"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setEditingId(null)}
+                          className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                          title="Cancel"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => { setEditingId(t.id); setEditTitle(t.title); }}
+                        className="text-muted-foreground hover:text-primary transition-colors shrink-0"
+                        title="Rename track"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
+
                     <button
                       onClick={() => removeTrack(t)}
                       className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
