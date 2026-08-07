@@ -11,6 +11,7 @@ import VoidInvadersPage from "./pages/VoidInvadersPage";
 import PhantomMazePage from "./pages/CyberManPage";
 
 import NeonPinballPage from "./pages/NeonPinballPage";
+import WipPage from "./pages/WipPage";
 import Leaderboard from "./pages/Leaderboard";
 import Admin from "./pages/Admin";
 import MusicPlayer from "./components/MusicPlayer";
