@@ -9,7 +9,7 @@ import GamePage from "./pages/GamePage";
 import NeonSnakePage from "./pages/NeonSnakePage";
 import VoidInvadersPage from "./pages/VoidInvadersPage";
 import PhantomMazePage from "./pages/CyberManPage";
-import SuperKartPage from "./pages/SuperKartPage";
+
 import NeonPinballPage from "./pages/NeonPinballPage";
 import Leaderboard from "./pages/Leaderboard";
 import Admin from "./pages/Admin";
@@ -30,7 +30,7 @@ const App = () => (
           <Route path="/game/neon-snake" element={<NeonSnakePage />} />
           <Route path="/game/void-invaders" element={<VoidInvadersPage />} />
           <Route path="/game/phantom-maze" element={<PhantomMazePage />} />
-          <Route path="/game/super-kart" element={<SuperKartPage />} />
+          
           <Route path="/game/neon-pinball" element={<NeonPinballPage />} />
           <Route path="/game/:slug" element={<GamePage />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
