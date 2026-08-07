@@ -11,6 +11,7 @@ import VoidInvadersPage from "./pages/VoidInvadersPage";
 import PhantomMazePage from "./pages/CyberManPage";
 
 import NeonPinballPage from "./pages/NeonPinballPage";
+import WipPage from "./pages/WipPage";
 import Leaderboard from "./pages/Leaderboard";
 import Admin from "./pages/Admin";
 import MusicPlayer from "./components/MusicPlayer";
@@ -32,7 +33,9 @@ const App = () => (
           <Route path="/game/phantom-maze" element={<PhantomMazePage />} />
           
           <Route path="/game/neon-pinball" element={<NeonPinballPage />} />
+          <Route path="/game/wip" element={<WipPage />} />
           <Route path="/game/:slug" element={<GamePage />} />
+
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<NotFound />} />
