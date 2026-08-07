@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Music2, Plus, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, ArrowDown, ArrowUp, Check, Music2, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,6 +11,7 @@ interface Track {
   id: string;
   title: string;
   url: string;
+  position: number;
   created_at: string;
 }
 
@@ -21,12 +22,15 @@ const Admin = () => {
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
 
   const load = useCallback(async () => {
     const { data } = await supabase
       .from("playlist")
-      .select("id, title, url, created_at")
-      .order("created_at", { ascending: false });
+      .select("id, title, url, position, created_at")
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true });
     setTracks(data ?? []);
   }, []);
 
@@ -51,11 +55,40 @@ const Admin = () => {
       finalUrl = `${STORAGE_PREFIX}${path}`;
     }
 
-    const { error } = await supabase.from("playlist").insert({ title: t, url: finalUrl });
+    const nextPos = tracks.length ? Math.max(...tracks.map((t) => t.position)) + 1 : 1;
+    const { error } = await supabase.from("playlist").insert({ title: t, url: finalUrl, position: nextPos });
     setBusy(false);
     if (error) return toast.error(error.message);
     toast.success("Track added");
     setTitle(""); setUrl(""); setFile(null);
+    load();
+  };
+
+  const saveTitle = async (track: Track) => {
+    const t = editTitle.trim();
+    if (!t) return toast.error("Title cannot be empty");
+    const { error } = await supabase.from("playlist").update({ title: t }).eq("id", track.id);
+    if (error) return toast.error(error.message);
+    setEditingId(null);
+    toast.success("Title updated");
+    load();
+  };
+
+  const move = async (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= tracks.length) return;
+    const a = tracks[index];
+    const b = tracks[target];
+    const next = [...tracks];
+    next[index] = b; next[target] = a;
+    setTracks(next);
+    const [r1, r2] = await Promise.all([
+      supabase.from("playlist").update({ position: b.position }).eq("id", a.id),
+      supabase.from("playlist").update({ position: a.position }).eq("id", b.id),
+    ]);
+    if (r1.error || r2.error) {
+      toast.error(r1.error?.message ?? r2.error?.message ?? "Could not reorder");
+    }
     load();
   };
 
@@ -68,6 +101,7 @@ const Admin = () => {
     toast.success("Track removed");
     load();
   };
+
 
   return (
     <div className="min-h-screen bg-background">
