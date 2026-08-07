@@ -9,10 +9,9 @@ const GAME_LABELS: Record<string, string> = {
   snake: "Neon Snake",
   invaders: "Void Invaders",
   pacman: "Phantom Maze",
-  racer: "Neon Racer",
 };
 
-const GAME_IDS = ["snake", "invaders", "pacman", "racer"];
+const GAME_IDS = ["snake", "invaders", "pacman"];
 
 interface LeaderEntry {
   player_name: string;

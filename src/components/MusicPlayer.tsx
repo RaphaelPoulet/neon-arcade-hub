@@ -29,6 +29,7 @@ const MusicPlayer = () => {
     const { data } = await supabase
       .from("playlist")
       .select("id, title, url")
+      .order("position", { ascending: true })
       .order("created_at", { ascending: true });
     setTracks(data ?? []);
   }, []);
