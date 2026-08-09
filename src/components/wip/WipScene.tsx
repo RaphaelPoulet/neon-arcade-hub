@@ -3,8 +3,11 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Grid } from "@react-three/drei";
 import * as THREE from "three";
 
-const MOVE_SPEED = 6;
-const TURN_SPEED = 2.4;
+const MAX_SPEED = 9;
+const ACCEL = 9;
+const BRAKE = 14;
+const DRAG = 2.2;
+const TURN_SPEED = 1.9;
 
 function useKeys() {
   const keys = useRef<Record<string, boolean>>({});
@@ -21,8 +24,83 @@ function useKeys() {
   return keys;
 }
 
-function Player() {
+const NEON_CYAN = "#22d3ee";
+const NEON_PINK = "#ec4899";
+
+function TankBody() {
+  return (
+    <group>
+      {/* Tracks */}
+      {[-0.72, 0.72].map((x) => (
+        <group key={x} position={[x, 0.32, 0]}>
+          <mesh castShadow receiveShadow>
+            <boxGeometry args={[0.42, 0.6, 2.3]} />
+            <meshStandardMaterial color="#15151f" metalness={0.7} roughness={0.55} />
+          </mesh>
+          {/* neon strip along track */}
+          <mesh position={[x > 0 ? 0.22 : -0.22, 0.05, 0]}>
+            <boxGeometry args={[0.03, 0.1, 2.1]} />
+            <meshStandardMaterial color={NEON_CYAN} emissive={NEON_CYAN} emissiveIntensity={1.6} />
+          </mesh>
+          {/* wheels hint */}
+          {[-0.8, -0.27, 0.27, 0.8].map((z) => (
+            <mesh key={z} position={[0, -0.16, z]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.16, 0.16, 0.46, 12]} />
+              <meshStandardMaterial color="#0d0d14" metalness={0.6} roughness={0.7} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      {/* Hull */}
+      <mesh position={[0, 0.72, 0]} castShadow receiveShadow>
+        <boxGeometry args={[1.6, 0.42, 2.4]} />
+        <meshStandardMaterial color="#1b1b28" metalness={0.75} roughness={0.4} />
+      </mesh>
+      {/* Sloped front glacis */}
+      <mesh position={[0, 0.6, 1.15]} rotation={[-0.5, 0, 0]} castShadow>
+        <boxGeometry args={[1.55, 0.5, 0.36]} />
+        <meshStandardMaterial color="#20202f" metalness={0.75} roughness={0.4} />
+      </mesh>
+      {/* Hull neon edge strips */}
+      {[-0.81, 0.81].map((x) => (
+        <mesh key={x} position={[x, 0.9, 0]}>
+          <boxGeometry args={[0.04, 0.06, 2.3]} />
+          <meshStandardMaterial color={NEON_PINK} emissive={NEON_PINK} emissiveIntensity={1.8} />
+        </mesh>
+      ))}
+
+      {/* Turret */}
+      <group position={[0, 1.08, -0.1]}>
+        <mesh castShadow>
+          <cylinderGeometry args={[0.62, 0.72, 0.45, 8]} />
+          <meshStandardMaterial color="#23233a" metalness={0.8} roughness={0.35} />
+        </mesh>
+        <mesh position={[0, 0.25, 0]}>
+          <cylinderGeometry args={[0.5, 0.6, 0.06, 8]} />
+          <meshStandardMaterial color={NEON_CYAN} emissive={NEON_CYAN} emissiveIntensity={1.4} />
+        </mesh>
+        {/* Barrel */}
+        <mesh position={[0, 0.02, 1.05]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[0.11, 0.13, 1.9, 12]} />
+          <meshStandardMaterial color="#15151f" metalness={0.85} roughness={0.3} />
+        </mesh>
+        <mesh position={[0, 0.02, 1.95]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.15, 0.15, 0.16, 12]} />
+          <meshStandardMaterial color={NEON_PINK} emissive={NEON_PINK} emissiveIntensity={2} />
+        </mesh>
+      </group>
+
+      {/* Under-glow */}
+      <pointLight position={[0, 0.2, 0]} color={NEON_CYAN} intensity={6} distance={5} />
+    </group>
+  );
+}
+
+function Tank() {
   const group = useRef<THREE.Group>(null!);
+  const speed = useRef(0);
+  const yawVel = useRef(0);
   const keys = useKeys();
   const camTarget = new THREE.Vector3();
   const camPos = new THREE.Vector3();
@@ -30,36 +108,41 @@ function Player() {
   useFrame((state, rawDelta) => {
     const delta = Math.min(rawDelta, 0.05);
     const k = keys.current;
-    const player = group.current;
-
-    const turn = (k.ArrowLeft || k.KeyA || k.KeyQ ? 1 : 0) - (k.ArrowRight || k.KeyD ? 1 : 0);
-    player.rotation.y += turn * TURN_SPEED * delta;
+    const tank = group.current;
 
     const fwd = (k.ArrowUp || k.KeyW || k.KeyZ ? 1 : 0) - (k.ArrowDown || k.KeyS ? 1 : 0);
-    if (fwd !== 0) {
-      const dir = new THREE.Vector3(0, 0, 1).applyEuler(player.rotation);
-      player.position.addScaledVector(dir, fwd * MOVE_SPEED * delta);
+    if (fwd > 0) speed.current += ACCEL * delta;
+    else if (fwd < 0) speed.current -= BRAKE * delta;
+    else speed.current -= speed.current * DRAG * delta;
+    speed.current = THREE.MathUtils.clamp(speed.current, -MAX_SPEED * 0.45, MAX_SPEED);
+    if (Math.abs(speed.current) < 0.02) speed.current = 0;
+
+    // heavy vehicle steering: eased yaw, slightly reduced at very low speed
+    const turnInput = (k.ArrowLeft || k.KeyA || k.KeyQ ? 1 : 0) - (k.ArrowRight || k.KeyD ? 1 : 0);
+    const grip = 0.45 + 0.55 * Math.min(1, Math.abs(speed.current) / (MAX_SPEED * 0.5));
+    const targetYaw = turnInput * TURN_SPEED * grip;
+    yawVel.current += (targetYaw - yawVel.current) * Math.min(1, delta * 5);
+    tank.rotation.y += yawVel.current * delta;
+
+    if (speed.current !== 0) {
+      const dir = new THREE.Vector3(0, 0, 1).applyEuler(tank.rotation);
+      tank.position.addScaledVector(dir, speed.current * delta);
     }
 
-    // Third-person camera: behind and above, smoothed
-    const behind = new THREE.Vector3(0, 3.2, -6.5).applyEuler(player.rotation);
-    camPos.copy(player.position).add(behind);
-    state.camera.position.lerp(camPos, 1 - Math.pow(0.001, delta));
-    camTarget.copy(player.position).add(new THREE.Vector3(0, 1.2, 0));
+    // body roll / pitch for weight
+    tank.rotation.z = THREE.MathUtils.lerp(tank.rotation.z, -yawVel.current * 0.06, 0.1);
+    tank.rotation.x = THREE.MathUtils.lerp(tank.rotation.x, -speed.current * 0.008, 0.08);
+
+    const behind = new THREE.Vector3(0, 3.6, -7.5).applyEuler(new THREE.Euler(0, tank.rotation.y, 0));
+    camPos.copy(tank.position).add(behind);
+    state.camera.position.lerp(camPos, 1 - Math.pow(0.0015, delta));
+    camTarget.copy(tank.position).add(new THREE.Vector3(0, 1.3, 0));
     state.camera.lookAt(camTarget);
   });
 
   return (
     <group ref={group} position={[0, 0, 0]}>
-      <mesh position={[0, 1, 0]} castShadow>
-        <capsuleGeometry args={[0.5, 1, 8, 16]} />
-        <meshStandardMaterial color="#22d3ee" emissive="#0ea5b7" emissiveIntensity={0.35} roughness={0.35} />
-      </mesh>
-      {/* facing indicator */}
-      <mesh position={[0, 1, 0.65]} castShadow>
-        <boxGeometry args={[0.3, 0.3, 0.5]} />
-        <meshStandardMaterial color="#ec4899" emissive="#ec4899" emissiveIntensity={0.6} />
-      </mesh>
+      <TankBody />
     </group>
   );
 }
@@ -97,7 +180,7 @@ const WipScene = () => {
         infiniteGrid
       />
 
-      <Player />
+      <Tank />
     </Canvas>
   );
 };
