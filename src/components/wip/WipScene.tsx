@@ -130,13 +130,19 @@ function Tank() {
     tank.rotation.y += yawVel.current * delta;
 
     if (speed.current !== 0) {
-      const dir = new THREE.Vector3(0, 0, 1).applyEuler(tank.rotation);
-      tank.position.addScaledVector(dir, speed.current * delta);
+      // move strictly in the XZ plane (yaw only) so height never drifts
+      moveDir.set(Math.sin(tank.rotation.y), 0, Math.cos(tank.rotation.y));
+      tank.position.addScaledVector(moveDir, speed.current * delta);
     }
+    // hard lock to the ground surface
+    tank.position.y = GROUND_Y;
+    tank.rotation.x = 0;
+    tank.rotation.z = 0;
 
-    // body roll / pitch for weight
-    tank.rotation.z = THREE.MathUtils.lerp(tank.rotation.z, -yawVel.current * 0.06, 0.1);
-    tank.rotation.x = THREE.MathUtils.lerp(tank.rotation.x, -speed.current * 0.008, 0.08);
+    // cosmetic body roll / pitch applied to a child so the chassis stays grounded
+    const t = tilt.current;
+    t.rotation.z = THREE.MathUtils.lerp(t.rotation.z, -yawVel.current * 0.04, 0.1);
+    t.rotation.x = THREE.MathUtils.lerp(t.rotation.x, -speed.current * 0.005, 0.08);
 
     const behind = new THREE.Vector3(0, 3.6, -7.5).applyEuler(new THREE.Euler(0, tank.rotation.y, 0));
     camPos.copy(tank.position).add(behind);
@@ -146,8 +152,13 @@ function Tank() {
   });
 
   return (
-    <group ref={group} position={[0, 0, 0]}>
-      <TankBody />
+    <group ref={group} position={[0, GROUND_Y, 0]}>
+      {/* pivot raised so cosmetic tilt rotates around the track contact line */}
+      <group ref={tilt} position={[0, 0.35, 0]}>
+        <group position={[0, -0.35, 0]}>
+          <TankBody />
+        </group>
+      </group>
     </group>
   );
 }
