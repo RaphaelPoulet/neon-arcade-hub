@@ -97,13 +97,18 @@ function TankBody() {
   );
 }
 
+// Ground plane elevation; tank origin sits exactly on this surface.
+const GROUND_Y = 0;
+
 function Tank() {
   const group = useRef<THREE.Group>(null!);
+  const tilt = useRef<THREE.Group>(null!);
   const speed = useRef(0);
   const yawVel = useRef(0);
   const keys = useKeys();
   const camTarget = new THREE.Vector3();
   const camPos = new THREE.Vector3();
+  const moveDir = new THREE.Vector3();
 
   useFrame((state, rawDelta) => {
     const delta = Math.min(rawDelta, 0.05);
