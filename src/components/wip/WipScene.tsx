@@ -191,12 +191,19 @@ function Track() {
         <group key={i}>
           <mesh position={w.p as unknown as [number, number, number]} castShadow receiveShadow>
             <boxGeometry args={w.s as unknown as [number, number, number]} />
-            <meshStandardMaterial color="#191926" metalness={0.7} roughness={0.4} />
+            <meshStandardMaterial
+              color="#0e5f73"
+              emissive={NEON_CYAN}
+              emissiveIntensity={0.45}
+              metalness={0.5}
+              roughness={0.4}
+            />
           </mesh>
           <mesh position={[w.p[0], 3.05, w.p[2]]}>
             <boxGeometry args={[w.s[0] * 1.005, 0.16, w.s[2] * 1.005]} />
-            <meshStandardMaterial color={NEON_PINK} emissive={NEON_PINK} emissiveIntensity={2} toneMapped={false} />
+            <meshStandardMaterial color={NEON_CYAN} emissive={NEON_CYAN} emissiveIntensity={2.4} toneMapped={false} />
           </mesh>
+
         </group>
       ))}
     </group>
