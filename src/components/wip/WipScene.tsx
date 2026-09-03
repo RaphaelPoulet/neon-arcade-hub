@@ -154,8 +154,9 @@ function Track() {
     <group>
       {/* road surface */}
       <mesh geometry={road} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
-        <meshStandardMaterial color="#141420" roughness={0.85} metalness={0.15} />
+        <meshStandardMaterial color="#59606b" roughness={0.92} metalness={0.05} />
       </mesh>
+
       {/* neon borders */}
       <mesh geometry={outerLine} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
         <meshStandardMaterial color={NEON_PINK} emissive={NEON_PINK} emissiveIntensity={2} toneMapped={false} />
