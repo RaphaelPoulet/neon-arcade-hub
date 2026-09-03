@@ -35,7 +35,7 @@ function TankBody() {
         <group key={x} position={[x, 0.32, 0]}>
           <mesh castShadow receiveShadow>
             <boxGeometry args={[0.42, 0.6, 2.3]} />
-            <meshStandardMaterial color="#15151f" metalness={0.7} roughness={0.55} />
+            <meshStandardMaterial color="#3c4457" metalness={0.7} roughness={0.55} />
           </mesh>
           {/* neon strip along track */}
           <mesh position={[x > 0 ? 0.22 : -0.22, 0.05, 0]}>
@@ -46,7 +46,7 @@ function TankBody() {
           {[-0.8, -0.27, 0.27, 0.8].map((z) => (
             <mesh key={z} position={[0, -0.16, z]} rotation={[0, 0, Math.PI / 2]}>
               <cylinderGeometry args={[0.16, 0.16, 0.46, 12]} />
-              <meshStandardMaterial color="#0d0d14" metalness={0.6} roughness={0.7} />
+              <meshStandardMaterial color="#2b3243" metalness={0.6} roughness={0.7} />
             </mesh>
           ))}
         </group>
@@ -55,12 +55,12 @@ function TankBody() {
       {/* Hull */}
       <mesh position={[0, 0.72, 0]} castShadow receiveShadow>
         <boxGeometry args={[1.6, 0.42, 2.4]} />
-        <meshStandardMaterial color="#1b1b28" metalness={0.75} roughness={0.4} />
+        <meshStandardMaterial color="#4a5670" metalness={0.55} roughness={0.35} />
       </mesh>
       {/* Sloped front glacis */}
       <mesh position={[0, 0.6, 1.15]} rotation={[-0.5, 0, 0]} castShadow>
         <boxGeometry args={[1.55, 0.5, 0.36]} />
-        <meshStandardMaterial color="#20202f" metalness={0.75} roughness={0.4} />
+        <meshStandardMaterial color="#55627e" metalness={0.55} roughness={0.35} />
       </mesh>
       {/* Hull neon edge strips */}
       {[-0.81, 0.81].map((x) => (
@@ -74,7 +74,7 @@ function TankBody() {
       <group position={[0, 1.08, -0.1]}>
         <mesh castShadow>
           <cylinderGeometry args={[0.62, 0.72, 0.45, 8]} />
-          <meshStandardMaterial color="#23233a" metalness={0.8} roughness={0.35} />
+          <meshStandardMaterial color="#5b6a8a" metalness={0.8} roughness={0.35} />
         </mesh>
         <mesh position={[0, 0.25, 0]}>
           <cylinderGeometry args={[0.5, 0.6, 0.06, 8]} />
@@ -83,7 +83,7 @@ function TankBody() {
         {/* Barrel */}
         <mesh position={[0, 0.02, 1.05]} rotation={[Math.PI / 2, 0, 0]} castShadow>
           <cylinderGeometry args={[0.11, 0.13, 1.9, 12]} />
-          <meshStandardMaterial color="#15151f" metalness={0.85} roughness={0.3} />
+          <meshStandardMaterial color="#3c4457" metalness={0.85} roughness={0.3} />
         </mesh>
         <mesh position={[0, 0.02, 1.95]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[0.15, 0.15, 0.16, 12]} />
