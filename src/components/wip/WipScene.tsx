@@ -175,7 +175,7 @@ function Track() {
 
       {/* inner island barrier */}
       <mesh geometry={island} rotation={[-Math.PI / 2, 0, 0]} position={[0, 1.1, 0]} castShadow receiveShadow>
-        <meshStandardMaterial color="#0e2530" metalness={0.5} roughness={0.5} />
+        <meshStandardMaterial color="#2b6b52" metalness={0.25} roughness={0.7} />
       </mesh>
       <mesh geometry={new THREE.ShapeGeometry(ringShape(INNER_R, INNER_R - 0.45), 12)} rotation={[-Math.PI / 2, 0, 0]} position={[0, 1.12, 0]}>
         <meshStandardMaterial color={NEON_CYAN} emissive={NEON_CYAN} emissiveIntensity={2.2} toneMapped={false} />
