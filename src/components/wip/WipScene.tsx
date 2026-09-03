@@ -298,35 +298,45 @@ function Tank() {
 const WipScene = () => {
   return (
     <Canvas shadows camera={{ position: [0, 4, -8], fov: 60 }} dpr={[1, 2]}>
-      <color attach="background" args={["#08080f"]} />
-      <fog attach="fog" args={["#08080f", 45, 160]} />
+      <color attach="background" args={["#2a1a4d"]} />
+      <fog attach="fog" args={["#3b2566", 60, 200]} />
 
-      <ambientLight intensity={0.45} />
+      {/* twilight sky dome */}
+      <mesh scale={[-1, 1, 1]}>
+        <sphereGeometry args={[300, 32, 16]} />
+        <meshBasicMaterial color="#3b2566" side={THREE.BackSide} fog={false} />
+      </mesh>
+
+      <hemisphereLight args={["#8b6bd8", "#2f5f45", 0.9] as const} />
+      <ambientLight intensity={0.85} />
       <directionalLight
         position={[10, 18, 8]}
-        intensity={1.2}
+        intensity={2.1}
+        color="#fff3e0"
         castShadow
         shadow-mapSize={[2048, 2048]}
       />
+      <directionalLight position={[-14, 10, -12]} intensity={0.7} color="#7ad7ff" />
 
       {/* grass / terrain */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[ARENA_X * 2, ARENA_Z * 2]} />
-        <meshStandardMaterial color="#0b1a16" roughness={1} />
+        <meshStandardMaterial color="#2f8f4e" roughness={0.95} />
       </mesh>
 
       <Grid
         args={[ARENA_X * 2, ARENA_Z * 2]}
         cellSize={2}
         cellThickness={0.6}
-        cellColor="#1b3b33"
+        cellColor="#3fae63"
         sectionSize={10}
         sectionThickness={1.2}
-        sectionColor="#2dd4a7"
-        fadeDistance={120}
+        sectionColor="#7bf0a5"
+        fadeDistance={140}
         fadeStrength={1.2}
         position={[0, 0.01, 0]}
       />
+
 
       <Track />
       <Tank />
