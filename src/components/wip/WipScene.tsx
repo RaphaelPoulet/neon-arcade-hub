@@ -35,7 +35,7 @@ function TankBody() {
         <group key={x} position={[x, 0.32, 0]}>
           <mesh castShadow receiveShadow>
             <boxGeometry args={[0.42, 0.6, 2.3]} />
-            <meshStandardMaterial color="#15151f" metalness={0.7} roughness={0.55} />
+            <meshStandardMaterial color="#3c4457" metalness={0.7} roughness={0.55} />
           </mesh>
           {/* neon strip along track */}
           <mesh position={[x > 0 ? 0.22 : -0.22, 0.05, 0]}>
@@ -46,7 +46,7 @@ function TankBody() {
           {[-0.8, -0.27, 0.27, 0.8].map((z) => (
             <mesh key={z} position={[0, -0.16, z]} rotation={[0, 0, Math.PI / 2]}>
               <cylinderGeometry args={[0.16, 0.16, 0.46, 12]} />
-              <meshStandardMaterial color="#0d0d14" metalness={0.6} roughness={0.7} />
+              <meshStandardMaterial color="#2b3243" metalness={0.6} roughness={0.7} />
             </mesh>
           ))}
         </group>
@@ -55,12 +55,12 @@ function TankBody() {
       {/* Hull */}
       <mesh position={[0, 0.72, 0]} castShadow receiveShadow>
         <boxGeometry args={[1.6, 0.42, 2.4]} />
-        <meshStandardMaterial color="#1b1b28" metalness={0.75} roughness={0.4} />
+        <meshStandardMaterial color="#4a5670" metalness={0.55} roughness={0.35} />
       </mesh>
       {/* Sloped front glacis */}
       <mesh position={[0, 0.6, 1.15]} rotation={[-0.5, 0, 0]} castShadow>
         <boxGeometry args={[1.55, 0.5, 0.36]} />
-        <meshStandardMaterial color="#20202f" metalness={0.75} roughness={0.4} />
+        <meshStandardMaterial color="#55627e" metalness={0.55} roughness={0.35} />
       </mesh>
       {/* Hull neon edge strips */}
       {[-0.81, 0.81].map((x) => (
@@ -74,7 +74,7 @@ function TankBody() {
       <group position={[0, 1.08, -0.1]}>
         <mesh castShadow>
           <cylinderGeometry args={[0.62, 0.72, 0.45, 8]} />
-          <meshStandardMaterial color="#23233a" metalness={0.8} roughness={0.35} />
+          <meshStandardMaterial color="#5b6a8a" metalness={0.8} roughness={0.35} />
         </mesh>
         <mesh position={[0, 0.25, 0]}>
           <cylinderGeometry args={[0.5, 0.6, 0.06, 8]} />
@@ -83,7 +83,7 @@ function TankBody() {
         {/* Barrel */}
         <mesh position={[0, 0.02, 1.05]} rotation={[Math.PI / 2, 0, 0]} castShadow>
           <cylinderGeometry args={[0.11, 0.13, 1.9, 12]} />
-          <meshStandardMaterial color="#15151f" metalness={0.85} roughness={0.3} />
+          <meshStandardMaterial color="#3c4457" metalness={0.85} roughness={0.3} />
         </mesh>
         <mesh position={[0, 0.02, 1.95]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[0.15, 0.15, 0.16, 12]} />
@@ -154,8 +154,9 @@ function Track() {
     <group>
       {/* road surface */}
       <mesh geometry={road} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
-        <meshStandardMaterial color="#141420" roughness={0.85} metalness={0.15} />
+        <meshStandardMaterial color="#59606b" roughness={0.92} metalness={0.05} />
       </mesh>
+
       {/* neon borders */}
       <mesh geometry={outerLine} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
         <meshStandardMaterial color={NEON_PINK} emissive={NEON_PINK} emissiveIntensity={2} toneMapped={false} />
@@ -174,7 +175,7 @@ function Track() {
 
       {/* inner island barrier */}
       <mesh geometry={island} rotation={[-Math.PI / 2, 0, 0]} position={[0, 1.1, 0]} castShadow receiveShadow>
-        <meshStandardMaterial color="#0e2530" metalness={0.5} roughness={0.5} />
+        <meshStandardMaterial color="#2b6b52" metalness={0.25} roughness={0.7} />
       </mesh>
       <mesh geometry={new THREE.ShapeGeometry(ringShape(INNER_R, INNER_R - 0.45), 12)} rotation={[-Math.PI / 2, 0, 0]} position={[0, 1.12, 0]}>
         <meshStandardMaterial color={NEON_CYAN} emissive={NEON_CYAN} emissiveIntensity={2.2} toneMapped={false} />
@@ -190,12 +191,19 @@ function Track() {
         <group key={i}>
           <mesh position={w.p as unknown as [number, number, number]} castShadow receiveShadow>
             <boxGeometry args={w.s as unknown as [number, number, number]} />
-            <meshStandardMaterial color="#191926" metalness={0.7} roughness={0.4} />
+            <meshStandardMaterial
+              color="#0e5f73"
+              emissive={NEON_CYAN}
+              emissiveIntensity={0.45}
+              metalness={0.5}
+              roughness={0.4}
+            />
           </mesh>
           <mesh position={[w.p[0], 3.05, w.p[2]]}>
             <boxGeometry args={[w.s[0] * 1.005, 0.16, w.s[2] * 1.005]} />
-            <meshStandardMaterial color={NEON_PINK} emissive={NEON_PINK} emissiveIntensity={2} toneMapped={false} />
+            <meshStandardMaterial color={NEON_CYAN} emissive={NEON_CYAN} emissiveIntensity={2.4} toneMapped={false} />
           </mesh>
+
         </group>
       ))}
     </group>
@@ -298,35 +306,45 @@ function Tank() {
 const WipScene = () => {
   return (
     <Canvas shadows camera={{ position: [0, 4, -8], fov: 60 }} dpr={[1, 2]}>
-      <color attach="background" args={["#08080f"]} />
-      <fog attach="fog" args={["#08080f", 45, 160]} />
+      <color attach="background" args={["#2a1a4d"]} />
+      <fog attach="fog" args={["#3b2566", 60, 200]} />
 
-      <ambientLight intensity={0.45} />
+      {/* twilight sky dome */}
+      <mesh scale={[-1, 1, 1]}>
+        <sphereGeometry args={[300, 32, 16]} />
+        <meshBasicMaterial color="#3b2566" side={THREE.BackSide} fog={false} />
+      </mesh>
+
+      <hemisphereLight args={["#8b6bd8", "#2f5f45", 0.9] as const} />
+      <ambientLight intensity={0.85} />
       <directionalLight
         position={[10, 18, 8]}
-        intensity={1.2}
+        intensity={2.1}
+        color="#fff3e0"
         castShadow
         shadow-mapSize={[2048, 2048]}
       />
+      <directionalLight position={[-14, 10, -12]} intensity={0.7} color="#7ad7ff" />
 
       {/* grass / terrain */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[ARENA_X * 2, ARENA_Z * 2]} />
-        <meshStandardMaterial color="#0b1a16" roughness={1} />
+        <meshStandardMaterial color="#2f8f4e" roughness={0.95} />
       </mesh>
 
       <Grid
         args={[ARENA_X * 2, ARENA_Z * 2]}
         cellSize={2}
         cellThickness={0.6}
-        cellColor="#1b3b33"
+        cellColor="#3fae63"
         sectionSize={10}
         sectionThickness={1.2}
-        sectionColor="#2dd4a7"
-        fadeDistance={120}
+        sectionColor="#7bf0a5"
+        fadeDistance={140}
         fadeStrength={1.2}
         position={[0, 0.01, 0]}
       />
+
 
       <Track />
       <Tank />
