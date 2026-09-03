@@ -27,7 +27,7 @@ function useKeys() {
 const NEON_CYAN = "#22d3ee";
 const NEON_PINK = "#ec4899";
 
-function TankBody() {
+export function TankBody() {
   return (
     <group>
       {/* Tracks */}
