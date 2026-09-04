@@ -271,6 +271,35 @@ function Circuit({ samples }: { samples: Sample[] }) {
         </mesh>
       </group>
 
+      {/* elevated deck: side barriers, neon top rails and under-deck fascia */}
+      {bridge.walls.map((w, i) => (
+        <group key={`w${i}`}>
+          <mesh geometry={w.body} castShadow>
+            <meshStandardMaterial color="#2b2050" metalness={0.65} roughness={0.4} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh geometry={w.cap}>
+            <meshStandardMaterial
+              color={w.side < 0 ? NEON_CYAN : NEON_PINK}
+              emissive={w.side < 0 ? NEON_CYAN : NEON_PINK}
+              emissiveIntensity={2.6}
+              toneMapped={false}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          <mesh geometry={w.fascia}>
+            <meshStandardMaterial color="#1d1636" metalness={0.5} roughness={0.6} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh geometry={w.glow}>
+            <meshStandardMaterial
+              color={NEON_PURPLE}
+              emissive={NEON_PURPLE}
+              emissiveIntensity={1.8}
+              toneMapped={false}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        </group>
+      ))}
       {bridge.rails.map((r, i) => (
         <mesh key={`r${i}`} position={r.pos} rotation={[0, r.rot, 0]}>
           <boxGeometry args={[r.len, 0.9, 0.35]} />
