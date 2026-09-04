@@ -80,6 +80,81 @@ function ribbon(samples: Sample[], inner: number, outer: number, yOff: number) {
   return g;
 }
 
+// vertical wall strip following the samples between i0..i1 at lateral offset
+function barrier(samples: Sample[], i0: number, i1: number, off: number, yBase: number, h: number) {
+  const g = new THREE.BufferGeometry();
+  const pos: number[] = [];
+  const idx: number[] = [];
+  let n = 0;
+  for (let i = i0; i <= i1; i++) {
+    const s = samples[(i + samples.length) % samples.length];
+    const x = s.p.x + s.n.x * off;
+    const z = s.p.z + s.n.z * off;
+    pos.push(x, s.p.y + yBase, z, x, s.p.y + yBase + h, z);
+    n++;
+  }
+  for (let i = 0; i < n - 1; i++) {
+    const a = i * 2;
+    const b = (i + 1) * 2;
+    idx.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+function gridTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = "#140b26";
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 4000; i++) {
+    const v = 20 + Math.random() * 26;
+    ctx.fillStyle = `rgba(${v},${v * 0.7},${v * 1.6},0.6)`;
+    ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+  }
+  ctx.strokeStyle = "rgba(120,60,200,0.55)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(0, 0, 256, 256);
+  ctx.strokeStyle = "rgba(80,40,150,0.35)";
+  ctx.lineWidth = 1;
+  for (let i = 64; i < 256; i += 64) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, 256);
+    ctx.moveTo(0, i);
+    ctx.lineTo(256, i);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(80, 80);
+  return tex;
+}
+
+function sunsetSkyTexture() {
+  const c = document.createElement("canvas");
+  c.width = 8;
+  c.height = 512;
+  const ctx = c.getContext("2d")!;
+  const g = ctx.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0.0, "#120a2e");
+  g.addColorStop(0.28, "#3b1060");
+  g.addColorStop(0.5, "#7b1f6a");
+  g.addColorStop(0.64, "#c62d55");
+  g.addColorStop(0.75, "#f2622b");
+  g.addColorStop(0.84, "#ffa63d");
+  g.addColorStop(0.92, "#4c1750");
+  g.addColorStop(1, "#1a0c２8".replace("２", "2"));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 8, 512);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
 function asphaltTexture() {
   const c = document.createElement("canvas");
   c.width = c.height = 128;
