@@ -86,7 +86,7 @@ export function TankBody({
       <group position={[0, 1.08, -0.1]}>
         <mesh castShadow>
           <cylinderGeometry args={[0.62, 0.72, 0.45, 8]} />
-          <meshStandardMaterial color="#5b6a8a" metalness={0.8} roughness={0.35} />
+          <meshStandardMaterial color={turret} metalness={0.8} roughness={roughness} />
         </mesh>
         <mesh position={[0, 0.25, 0]}>
           <cylinderGeometry args={[0.5, 0.6, 0.06, 8]} />
