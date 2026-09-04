@@ -1,6 +1,7 @@
 import { Suspense, useState } from "react";
 import Navbar from "@/components/Navbar";
 import WipScene from "@/components/wip/WipScene";
+import NeonCityScene from "@/components/wip/NeonCityScene";
 import TrackSelectMenu, { type TrackId } from "@/components/wip/TrackSelectMenu";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
@@ -24,7 +25,7 @@ const WipPage = () => {
             {track ? (
               <>
                 <Suspense fallback={null}>
-                  <WipScene key={track} />
+                  {track === "neon-city-8" ? <NeonCityScene key={track} /> : <WipScene key={track} />}
                 </Suspense>
                 <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3">
                   <Button
