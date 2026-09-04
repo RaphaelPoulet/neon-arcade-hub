@@ -147,7 +147,7 @@ function sunsetSkyTexture() {
   g.addColorStop(0.75, "#f2622b");
   g.addColorStop(0.84, "#ffa63d");
   g.addColorStop(0.92, "#4c1750");
-  g.addColorStop(1, "#1a0c２8".replace("２", "2"));
+  g.addColorStop(1, "#1a0c28");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 8, 512);
   const tex = new THREE.CanvasTexture(c);
