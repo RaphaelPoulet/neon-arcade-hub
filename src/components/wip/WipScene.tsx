@@ -27,7 +27,19 @@ function useKeys() {
 const NEON_CYAN = "#22d3ee";
 const NEON_PINK = "#ec4899";
 
-export function TankBody() {
+export function TankBody({
+  hull = "#4a5670",
+  hullLight = "#55627e",
+  turret = "#5b6a8a",
+  metalness = 0.55,
+  roughness = 0.35,
+}: {
+  hull?: string;
+  hullLight?: string;
+  turret?: string;
+  metalness?: number;
+  roughness?: number;
+}) {
   return (
     <group>
       {/* Tracks */}
