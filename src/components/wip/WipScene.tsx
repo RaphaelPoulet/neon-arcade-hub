@@ -67,7 +67,7 @@ export function TankBody({
       {/* Hull */}
       <mesh position={[0, 0.72, 0]} castShadow receiveShadow>
         <boxGeometry args={[1.6, 0.42, 2.4]} />
-        <meshStandardMaterial color="#4a5670" metalness={0.55} roughness={0.35} />
+        <meshStandardMaterial color={hull} metalness={metalness} roughness={roughness} />
       </mesh>
       {/* Sloped front glacis */}
       <mesh position={[0, 0.6, 1.15]} rotation={[-0.5, 0, 0]} castShadow>
