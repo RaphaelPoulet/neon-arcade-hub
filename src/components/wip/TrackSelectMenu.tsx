@@ -1,6 +1,6 @@
 import { Lock } from "lucide-react";
 
-export type TrackId = "test";
+export type TrackId = "test" | "neon-city-8";
 
 const TRACKS = [
   {
@@ -11,11 +11,11 @@ const TRACKS = [
     available: true,
   },
   {
-    id: "neon-grid",
-    name: "NEON GRID",
-    subtitle: "Coming Soon",
-    desc: "A wireframe canyon run through the datasphere.",
-    available: false,
+    id: "neon-city-8" as TrackId,
+    name: "NEON CITY 8",
+    subtitle: "Figure-8 Overpass",
+    desc: "A vast figure-eight through a cyberpunk skyline, crossing itself on an elevated bridge.",
+    available: true,
   },
   {
     id: "cyber-city",
