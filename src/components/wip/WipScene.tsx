@@ -27,7 +27,19 @@ function useKeys() {
 const NEON_CYAN = "#22d3ee";
 const NEON_PINK = "#ec4899";
 
-export function TankBody() {
+export function TankBody({
+  hull = "#4a5670",
+  hullLight = "#55627e",
+  turret = "#5b6a8a",
+  metalness = 0.55,
+  roughness = 0.35,
+}: {
+  hull?: string;
+  hullLight?: string;
+  turret?: string;
+  metalness?: number;
+  roughness?: number;
+}) {
   return (
     <group>
       {/* Tracks */}
@@ -55,12 +67,12 @@ export function TankBody() {
       {/* Hull */}
       <mesh position={[0, 0.72, 0]} castShadow receiveShadow>
         <boxGeometry args={[1.6, 0.42, 2.4]} />
-        <meshStandardMaterial color="#4a5670" metalness={0.55} roughness={0.35} />
+        <meshStandardMaterial color={hull} metalness={metalness} roughness={roughness} />
       </mesh>
       {/* Sloped front glacis */}
       <mesh position={[0, 0.6, 1.15]} rotation={[-0.5, 0, 0]} castShadow>
         <boxGeometry args={[1.55, 0.5, 0.36]} />
-        <meshStandardMaterial color="#55627e" metalness={0.55} roughness={0.35} />
+        <meshStandardMaterial color={hullLight} metalness={metalness} roughness={roughness} />
       </mesh>
       {/* Hull neon edge strips */}
       {[-0.81, 0.81].map((x) => (
@@ -74,7 +86,7 @@ export function TankBody() {
       <group position={[0, 1.08, -0.1]}>
         <mesh castShadow>
           <cylinderGeometry args={[0.62, 0.72, 0.45, 8]} />
-          <meshStandardMaterial color="#5b6a8a" metalness={0.8} roughness={0.35} />
+          <meshStandardMaterial color={turret} metalness={0.8} roughness={roughness} />
         </mesh>
         <mesh position={[0, 0.25, 0]}>
           <cylinderGeometry args={[0.5, 0.6, 0.06, 8]} />

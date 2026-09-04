@@ -80,6 +80,81 @@ function ribbon(samples: Sample[], inner: number, outer: number, yOff: number) {
   return g;
 }
 
+// vertical wall strip following the samples between i0..i1 at lateral offset
+function barrier(samples: Sample[], i0: number, i1: number, off: number, yBase: number, h: number) {
+  const g = new THREE.BufferGeometry();
+  const pos: number[] = [];
+  const idx: number[] = [];
+  let n = 0;
+  for (let i = i0; i <= i1; i++) {
+    const s = samples[(i + samples.length) % samples.length];
+    const x = s.p.x + s.n.x * off;
+    const z = s.p.z + s.n.z * off;
+    pos.push(x, s.p.y + yBase, z, x, s.p.y + yBase + h, z);
+    n++;
+  }
+  for (let i = 0; i < n - 1; i++) {
+    const a = i * 2;
+    const b = (i + 1) * 2;
+    idx.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+function gridTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = "#140b26";
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 4000; i++) {
+    const v = 20 + Math.random() * 26;
+    ctx.fillStyle = `rgba(${v},${v * 0.7},${v * 1.6},0.6)`;
+    ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+  }
+  ctx.strokeStyle = "rgba(120,60,200,0.55)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(0, 0, 256, 256);
+  ctx.strokeStyle = "rgba(80,40,150,0.35)";
+  ctx.lineWidth = 1;
+  for (let i = 64; i < 256; i += 64) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, 256);
+    ctx.moveTo(0, i);
+    ctx.lineTo(256, i);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(80, 80);
+  return tex;
+}
+
+function sunsetSkyTexture() {
+  const c = document.createElement("canvas");
+  c.width = 8;
+  c.height = 512;
+  const ctx = c.getContext("2d")!;
+  const g = ctx.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0.0, "#120a2e");
+  g.addColorStop(0.28, "#3b1060");
+  g.addColorStop(0.5, "#7b1f6a");
+  g.addColorStop(0.64, "#c62d55");
+  g.addColorStop(0.75, "#f2622b");
+  g.addColorStop(0.84, "#ffa63d");
+  g.addColorStop(0.92, "#4c1750");
+  g.addColorStop(1, "#1a0c28");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 8, 512);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
 function asphaltTexture() {
   const c = document.createElement("canvas");
   c.width = c.height = 128;
@@ -151,7 +226,20 @@ function Circuit({ samples }: { samples: Sample[] }) {
         pillars.push({ pos: [s.p.x, s.p.y / 2, s.p.z], h: s.p.y });
       }
     }
-    return { rails, pillars };
+    // contiguous elevated index range (bump is centered on t = PI)
+    let i0 = 0;
+    let i1 = SAMPLES - 1;
+    const mid = Math.round(SAMPLES / 2);
+    while (i0 < mid && samples[i0].p.y < 0.15) i0++;
+    while (i1 > mid && samples[i1].p.y < 0.15) i1--;
+    const walls = [-1, 1].map((side) => ({
+      body: barrier(samples, i0, i1, side * (ROAD_HALF + 0.55), 0, 1.15),
+      cap: barrier(samples, i0, i1, side * (ROAD_HALF + 0.55), 1.15, 0.22),
+      fascia: barrier(samples, i0, i1, side * (ROAD_HALF + 2.2), -1.6, 1.3),
+      glow: barrier(samples, i0, i1, side * (ROAD_HALF + 2.2), -0.55, 0.18),
+      side,
+    }));
+    return { rails, pillars, walls };
   }, [samples]);
 
   return (
@@ -183,6 +271,35 @@ function Circuit({ samples }: { samples: Sample[] }) {
         </mesh>
       </group>
 
+      {/* elevated deck: side barriers, neon top rails and under-deck fascia */}
+      {bridge.walls.map((w, i) => (
+        <group key={`w${i}`}>
+          <mesh geometry={w.body} castShadow>
+            <meshStandardMaterial color="#2b2050" metalness={0.65} roughness={0.4} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh geometry={w.cap}>
+            <meshStandardMaterial
+              color={w.side < 0 ? NEON_CYAN : NEON_PINK}
+              emissive={w.side < 0 ? NEON_CYAN : NEON_PINK}
+              emissiveIntensity={2.6}
+              toneMapped={false}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          <mesh geometry={w.fascia}>
+            <meshStandardMaterial color="#1d1636" metalness={0.5} roughness={0.6} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh geometry={w.glow}>
+            <meshStandardMaterial
+              color={NEON_PURPLE}
+              emissive={NEON_PURPLE}
+              emissiveIntensity={1.8}
+              toneMapped={false}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        </group>
+      ))}
       {bridge.rails.map((r, i) => (
         <mesh key={`r${i}`} position={r.pos} rotation={[0, r.rot, 0]}>
           <boxGeometry args={[r.len, 0.9, 0.35]} />
@@ -386,7 +503,7 @@ function Tank({ samples }: { samples: Sample[] }) {
     <group ref={group} position={[start.x, start.y, start.z]} rotation={[0, yaw, 0]}>
       <group ref={tilt} position={[0, 0.35, 0]}>
         <group position={[0, -0.35, 0]}>
-          <TankBody />
+          <TankBody hull="#ff7a18" hullLight="#ffb347" turret="#ffd08a" metalness={0.85} roughness={0.22} />
         </group>
       </group>
     </group>
@@ -395,32 +512,36 @@ function Tank({ samples }: { samples: Sample[] }) {
 
 const NeonCityScene = () => {
   const samples = useMemo(buildSamples, []);
+  const sky = useMemo(sunsetSkyTexture, []);
+  const ground = useMemo(gridTexture, []);
 
   return (
     <Canvas shadows camera={{ position: [0, 6, -12], fov: 62 }} dpr={[1, 2]}>
-      <color attach="background" args={["#07040f"]} />
-      <fog attach="fog" args={["#150b2b", 180, 700]} />
+      <color attach="background" args={["#2a0f38"]} />
+      <fog attach="fog" args={["#5c1c46", 220, 780]} />
 
-      {/* night sky with a glowing urban horizon */}
+      {/* synthwave sunset skybox */}
       <mesh scale={[-1, 1, 1]}>
-        <sphereGeometry args={[900, 32, 16]} />
-        <meshBasicMaterial color="#0b0620" side={THREE.BackSide} fog={false} />
+        <sphereGeometry args={[900, 48, 32]} />
+        <meshBasicMaterial map={sky} side={THREE.BackSide} fog={false} />
       </mesh>
-      <mesh position={[0, 20, 0]}>
-        <cylinderGeometry args={[820, 820, 90, 48, 1, true]} />
-        <meshBasicMaterial color="#5b1d6e" side={THREE.BackSide} transparent opacity={0.75} fog={false} />
+      {/* warm sun glow at the horizon */}
+      <mesh position={[0, 28, 0]}>
+        <cylinderGeometry args={[830, 830, 70, 48, 1, true]} />
+        <meshBasicMaterial color="#ff7b2e" side={THREE.BackSide} transparent opacity={0.35} fog={false} />
       </mesh>
 
-      <hemisphereLight args={["#7c5bd8", "#120a22", 0.75] as const} />
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[80, 120, -60]} intensity={1.1} color="#b18bff" castShadow shadow-mapSize={[2048, 2048]} />
-      <directionalLight position={[-90, 70, 80]} intensity={0.6} color="#22d3ee" />
+      <hemisphereLight args={["#ff9a5b", "#1a0f2e", 0.85] as const} />
+      <ambientLight intensity={0.45} />
+      <directionalLight position={[80, 90, -240]} intensity={1.5} color="#ff8a3d" castShadow shadow-mapSize={[2048, 2048]} />
+      <directionalLight position={[-90, 70, 80]} intensity={0.7} color="#22d3ee" />
 
-      {/* city ground */}
+      {/* city ground — dark textured grid, distinct from the asphalt road */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
         <planeGeometry args={[1600, 1600]} />
-        <meshStandardMaterial color="#0e0a1c" roughness={0.85} metalness={0.15} />
+        <meshStandardMaterial map={ground} color="#5a3b8c" roughness={0.95} metalness={0.05} />
       </mesh>
+
 
       <Circuit samples={samples} />
       <City />
