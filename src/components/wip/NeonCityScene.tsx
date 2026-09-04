@@ -173,10 +173,15 @@ function Circuit({ samples }: { samples: Sample[] }) {
       </mesh>
 
       {/* start / finish */}
-      <mesh position={[pointAt(0.35).x, pointAt(0.35).y + 0.07, pointAt(0.35).z]} rotation={[-Math.PI / 2, 0, 0.35]}>
-        <planeGeometry args={[ROAD_HALF * 2, 2]} />
-        <meshStandardMaterial color="#f2f2ff" emissive="#f2f2ff" emissiveIntensity={0.8} />
-      </mesh>
+      <group
+        position={[pointAt(0.35).x, pointAt(0.35).y + 0.07, pointAt(0.35).z]}
+        rotation={[0, Math.atan2(pointAt(0.4).x - pointAt(0.35).x, pointAt(0.4).z - pointAt(0.35).z), 0]}
+      >
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[ROAD_HALF * 2, 2]} />
+          <meshStandardMaterial color="#f2f2ff" emissive="#f2f2ff" emissiveIntensity={0.8} />
+        </mesh>
+      </group>
 
       {bridge.rails.map((r, i) => (
         <mesh key={`r${i}`} position={r.pos} rotation={[0, r.rot, 0]}>
