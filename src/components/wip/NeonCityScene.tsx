@@ -226,7 +226,20 @@ function Circuit({ samples }: { samples: Sample[] }) {
         pillars.push({ pos: [s.p.x, s.p.y / 2, s.p.z], h: s.p.y });
       }
     }
-    return { rails, pillars };
+    // contiguous elevated index range (bump is centered on t = PI)
+    let i0 = 0;
+    let i1 = SAMPLES - 1;
+    const mid = Math.round(SAMPLES / 2);
+    while (i0 < mid && samples[i0].p.y < 0.15) i0++;
+    while (i1 > mid && samples[i1].p.y < 0.15) i1--;
+    const walls = [-1, 1].map((side) => ({
+      body: barrier(samples, i0, i1, side * (ROAD_HALF + 0.55), 0, 1.15),
+      cap: barrier(samples, i0, i1, side * (ROAD_HALF + 0.55), 1.15, 0.22),
+      fascia: barrier(samples, i0, i1, side * (ROAD_HALF + 2.2), -1.6, 1.3),
+      glow: barrier(samples, i0, i1, side * (ROAD_HALF + 2.2), -0.55, 0.18),
+      side,
+    }));
+    return { rails, pillars, walls };
   }, [samples]);
 
   return (
