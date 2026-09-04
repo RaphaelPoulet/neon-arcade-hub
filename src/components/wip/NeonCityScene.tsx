@@ -512,32 +512,36 @@ function Tank({ samples }: { samples: Sample[] }) {
 
 const NeonCityScene = () => {
   const samples = useMemo(buildSamples, []);
+  const sky = useMemo(sunsetSkyTexture, []);
+  const ground = useMemo(gridTexture, []);
 
   return (
     <Canvas shadows camera={{ position: [0, 6, -12], fov: 62 }} dpr={[1, 2]}>
-      <color attach="background" args={["#07040f"]} />
-      <fog attach="fog" args={["#150b2b", 180, 700]} />
+      <color attach="background" args={["#2a0f38"]} />
+      <fog attach="fog" args={["#5c1c46", 220, 780]} />
 
-      {/* night sky with a glowing urban horizon */}
+      {/* synthwave sunset skybox */}
       <mesh scale={[-1, 1, 1]}>
-        <sphereGeometry args={[900, 32, 16]} />
-        <meshBasicMaterial color="#0b0620" side={THREE.BackSide} fog={false} />
+        <sphereGeometry args={[900, 48, 32]} />
+        <meshBasicMaterial map={sky} side={THREE.BackSide} fog={false} />
       </mesh>
-      <mesh position={[0, 20, 0]}>
-        <cylinderGeometry args={[820, 820, 90, 48, 1, true]} />
-        <meshBasicMaterial color="#5b1d6e" side={THREE.BackSide} transparent opacity={0.75} fog={false} />
+      {/* warm sun glow at the horizon */}
+      <mesh position={[0, 28, 0]}>
+        <cylinderGeometry args={[830, 830, 70, 48, 1, true]} />
+        <meshBasicMaterial color="#ff7b2e" side={THREE.BackSide} transparent opacity={0.35} fog={false} />
       </mesh>
 
-      <hemisphereLight args={["#7c5bd8", "#120a22", 0.75] as const} />
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[80, 120, -60]} intensity={1.1} color="#b18bff" castShadow shadow-mapSize={[2048, 2048]} />
-      <directionalLight position={[-90, 70, 80]} intensity={0.6} color="#22d3ee" />
+      <hemisphereLight args={["#ff9a5b", "#1a0f2e", 0.85] as const} />
+      <ambientLight intensity={0.45} />
+      <directionalLight position={[80, 90, -240]} intensity={1.5} color="#ff8a3d" castShadow shadow-mapSize={[2048, 2048]} />
+      <directionalLight position={[-90, 70, 80]} intensity={0.7} color="#22d3ee" />
 
-      {/* city ground */}
+      {/* city ground — dark textured grid, distinct from the asphalt road */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
         <planeGeometry args={[1600, 1600]} />
-        <meshStandardMaterial color="#0e0a1c" roughness={0.85} metalness={0.15} />
+        <meshStandardMaterial map={ground} color="#5a3b8c" roughness={0.95} metalness={0.05} />
       </mesh>
+
 
       <Circuit samples={samples} />
       <City />
