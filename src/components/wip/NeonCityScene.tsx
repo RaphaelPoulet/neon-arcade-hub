@@ -503,7 +503,7 @@ function Tank({ samples }: { samples: Sample[] }) {
     <group ref={group} position={[start.x, start.y, start.z]} rotation={[0, yaw, 0]}>
       <group ref={tilt} position={[0, 0.35, 0]}>
         <group position={[0, -0.35, 0]}>
-          <TankBody />
+          <TankBody hull="#ff7a18" hullLight="#ffb347" turret="#ffd08a" metalness={0.85} roughness={0.22} />
         </group>
       </group>
     </group>
