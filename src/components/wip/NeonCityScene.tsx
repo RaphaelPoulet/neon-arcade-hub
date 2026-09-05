@@ -531,8 +531,8 @@ const NeonCityScene = () => {
         <meshBasicMaterial color="#ff7b2e" side={THREE.BackSide} transparent opacity={0.35} fog={false} />
       </mesh>
 
-      <hemisphereLight args={["#ff9a5b", "#1a0f2e", 0.85] as const} />
-      <ambientLight intensity={0.45} />
+      <hemisphereLight args={["#ffb066", "#2a1b46", 1.2] as const} />
+      <ambientLight intensity={0.9} />
       <directionalLight position={[80, 90, -240]} intensity={1.5} color="#ff8a3d" castShadow shadow-mapSize={[2048, 2048]} />
       <directionalLight position={[-90, 70, 80]} intensity={0.7} color="#22d3ee" />
 
