@@ -222,97 +222,48 @@ function Track() {
   );
 }
 
-function Tank() {
-  const group = useRef<THREE.Group>(null!);
-  const tilt = useRef<THREE.Group>(null!);
-  const speed = useRef(0);
-  const yawVel = useRef(0);
-  const keys = useKeys();
-  const camTarget = new THREE.Vector3();
-  const camPos = new THREE.Vector3();
-  const moveDir = new THREE.Vector3();
+// ---- waypoints: stadium centerline sampled by arc length --------------------
+const OVAL_SAMPLES = 900;
 
-  useFrame((state, rawDelta) => {
-    const delta = Math.min(rawDelta, 0.05);
-    const k = keys.current;
-    const tank = group.current;
+function ovalPointAt(u: number, out = new THREE.Vector3()) {
+  const R = CENTER_R;
+  const SH = STRAIGHT_HALF;
+  const capLen = Math.PI * R;
+  const total = 4 * SH + 2 * capLen;
+  let d = ((u % 1) + 1) % 1;
+  d *= total;
+  if (d < SH) return out.set(R, 0, -d);
+  d -= SH;
+  if (d < capLen) {
+    const phi = -(d / R);
+    return out.set(R * Math.cos(phi), 0, -SH + R * Math.sin(phi));
+  }
+  d -= capLen;
+  if (d < 2 * SH) return out.set(-R, 0, -SH + d);
+  d -= 2 * SH;
+  if (d < capLen) {
+    const phi = Math.PI - d / R;
+    return out.set(R * Math.cos(phi), 0, SH + R * Math.sin(phi));
+  }
+  d -= capLen;
+  return out.set(R, 0, SH - d);
+}
 
-    const fwd = (k.ArrowUp || k.KeyW || k.KeyZ ? 1 : 0) - (k.ArrowDown || k.KeyS ? 1 : 0);
-    if (fwd > 0) speed.current += ACCEL * delta;
-    else if (fwd < 0) speed.current -= BRAKE * delta;
-    else speed.current -= speed.current * DRAG * delta;
-    speed.current = THREE.MathUtils.clamp(speed.current, -MAX_SPEED * 0.45, MAX_SPEED);
-    if (Math.abs(speed.current) < 0.02) speed.current = 0;
-
-    // heavy vehicle steering: eased yaw, slightly reduced at very low speed
-    const turnInput = (k.ArrowLeft || k.KeyA || k.KeyQ ? 1 : 0) - (k.ArrowRight || k.KeyD ? 1 : 0);
-    const grip = 0.45 + 0.55 * Math.min(1, Math.abs(speed.current) / (MAX_SPEED * 0.5));
-    const targetYaw = turnInput * TURN_SPEED * grip;
-    yawVel.current += (targetYaw - yawVel.current) * Math.min(1, delta * 5);
-    tank.rotation.y += yawVel.current * delta;
-
-    if (speed.current !== 0) {
-      // move strictly in the XZ plane (yaw only) so height never drifts
-      moveDir.set(Math.sin(tank.rotation.y), 0, Math.cos(tank.rotation.y));
-      tank.position.addScaledVector(moveDir, speed.current * delta);
-    }
-
-    // --- collisions ---
-    // outer arena walls
-    const limX = ARENA_X - 0.5 - TANK_R;
-    const limZ = ARENA_Z - 0.5 - TANK_R;
-    let hit = false;
-    if (tank.position.x > limX) { tank.position.x = limX; hit = true; }
-    if (tank.position.x < -limX) { tank.position.x = -limX; hit = true; }
-    if (tank.position.z > limZ) { tank.position.z = limZ; hit = true; }
-    if (tank.position.z < -limZ) { tank.position.z = -limZ; hit = true; }
-
-    // inner island barrier (push outwards from the oval centerline)
-    const cz = THREE.MathUtils.clamp(tank.position.z, -STRAIGHT_HALF, STRAIGHT_HALF);
-    const dx = tank.position.x;
-    const dz = tank.position.z - cz;
-    const d = Math.hypot(dx, dz) || 1e-4;
-    const minD = INNER_R + TANK_R;
-    if (d < minD) {
-      const nx = dx / d;
-      const nz = dz / d;
-      tank.position.x = nx * minD;
-      tank.position.z = cz + nz * minD;
-      hit = true;
-    }
-    if (hit) speed.current *= 0.35;
-
-    // grass slows the tank down significantly
-    const dist = centerlineDist(tank.position.x, tank.position.z);
-    if (dist > OUTER_R) speed.current *= 1 - Math.min(0.9, 3 * delta);
-
-    // hard lock to the ground surface
-    tank.position.y = GROUND_Y;
-    tank.rotation.x = 0;
-    tank.rotation.z = 0;
-
-    // cosmetic body roll / pitch applied to a child so the chassis stays grounded
-    const t = tilt.current;
-    t.rotation.z = THREE.MathUtils.lerp(t.rotation.z, -yawVel.current * 0.04, 0.1);
-    t.rotation.x = THREE.MathUtils.lerp(t.rotation.x, -speed.current * 0.005, 0.08);
-
-    const behind = new THREE.Vector3(0, 3.6, -7.5).applyEuler(new THREE.Euler(0, tank.rotation.y, 0));
-    camPos.copy(tank.position).add(behind);
-    state.camera.position.lerp(camPos, 1 - Math.pow(0.0015, delta));
-    camTarget.copy(tank.position).add(new THREE.Vector3(0, 1.3, 0));
-    state.camera.lookAt(camTarget);
-  });
-
-  return (
-    <group ref={group} position={[CENTER_R, GROUND_Y, 0]} rotation={[0, Math.PI, 0]}>
-      {/* pivot raised so cosmetic tilt rotates around the track contact line */}
-      <group ref={tilt} position={[0, 0.35, 0]}>
-        <group position={[0, -0.35, 0]}>
-          <TankBody />
-        </group>
-      </group>
-    </group>
-  );
+export function buildOvalSamples(): Sample[] {
+  const arr: Sample[] = [];
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  for (let i = 0; i < OVAL_SAMPLES; i++) {
+    const u = i / OVAL_SAMPLES;
+    const p = ovalPointAt(u).clone();
+    ovalPointAt(u - 1 / OVAL_SAMPLES / 2, a);
+    ovalPointAt(u + 1 / OVAL_SAMPLES / 2, b);
+    const tan = b.clone().sub(a);
+    tan.y = 0;
+    tan.normalize();
+    arr.push({ p, n: new THREE.Vector3(tan.z, 0, -tan.x) });
+  }
+  return arr;
 }
 
 const WipScene = () => {
