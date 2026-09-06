@@ -1,7 +1,9 @@
-import { useMemo, useRef } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { useMemo } from "react";
+import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
-import { TankBody } from "./WipScene";
+import Racers from "./Racers";
+import type { RaceSnapshot, Sample, TrackConfig } from "./raceCore";
+
 
 // ---------------------------------------------------------------------------
 // Figure-8 circuit ("Neon City 8")
