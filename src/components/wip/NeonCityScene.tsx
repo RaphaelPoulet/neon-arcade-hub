@@ -393,10 +393,21 @@ const TURN_SPEED = 1.5;
 const START_IDX = Math.round((0.35 / (Math.PI * 2)) * SAMPLES);
 
 
-const NeonCityScene = () => {
+const NeonCityScene = ({ onSnapshot }: { onSnapshot?: (s: RaceSnapshot) => void }) => {
   const samples = useMemo(buildSamples, []);
   const sky = useMemo(sunsetSkyTexture, []);
   const ground = useMemo(gridTexture, []);
+  const cfg = useMemo<TrackConfig>(
+    () => ({
+      samples,
+      startIdx: START_IDX,
+      roadHalf: ROAD_HALF,
+      physics: { maxSpeed: MAX_SPEED, accel: ACCEL, brake: BRAKE, drag: DRAG, turnSpeed: TURN_SPEED },
+      clampAlways: false,
+    }),
+    [samples],
+  );
+
 
   return (
     <Canvas shadows camera={{ position: [0, 6, -12], fov: 62 }} dpr={[1, 2]}>
