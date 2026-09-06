@@ -37,8 +37,12 @@ type Props = {
 };
 
 export default function Racers({ cfg, onSnapshot, camHeight = 4.2, camBack = 9 }: Props) {
-  const race = useMemo(() => createRace(cfg), [cfg]);
+  // the race object must survive parent re-renders (HUD updates every 0.1s)
+  const raceRef = useRef<ReturnType<typeof createRace> | null>(null);
+  if (!raceRef.current) raceRef.current = createRace(cfg);
+  const race = raceRef.current;
   const keys = useKeys();
+
   const groups = useRef<(THREE.Group | null)[]>([]);
   const tilts = useRef<(THREE.Group | null)[]>([]);
   const acc = useRef(0);

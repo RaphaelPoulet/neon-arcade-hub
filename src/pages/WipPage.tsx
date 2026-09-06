@@ -1,13 +1,31 @@
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import Navbar from "@/components/Navbar";
 import WipScene from "@/components/wip/WipScene";
 import NeonCityScene from "@/components/wip/NeonCityScene";
 import TrackSelectMenu, { type TrackId } from "@/components/wip/TrackSelectMenu";
+import { RaceHud, Countdown, Podium } from "@/components/wip/RaceOverlay";
+import type { RaceSnapshot } from "@/components/wip/raceCore";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
 
 const WipPage = () => {
   const [track, setTrack] = useState<TrackId | null>(null);
+  const [run, setRun] = useState(0);
+  const [snap, setSnap] = useState<RaceSnapshot | null>(null);
+
+  const onSnapshot = useCallback((s: RaceSnapshot) => setSnap(s), []);
+
+  const restart = () => {
+    setSnap(null);
+    setRun((r) => r + 1);
+  };
+
+  const exit = () => {
+    setSnap(null);
+    setTrack(null);
+  };
+
+  const sceneKey = `${track}-${run}`;
 
   return (
     <div className="min-h-screen bg-background">
@@ -17,7 +35,7 @@ const WipPage = () => {
           <h1 className="text-2xl font-bold tracking-widest text-primary">WIP RACING</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {track
-              ? "W / Up = accelerate · S / Down = reverse / brake · A / D or Left / Right = steer"
+              ? "W / Up = accelerate · S / Down = reverse / brake · A / D or Left / Right = steer · 3 laps vs VOLT, AMPER & HEX"
               : "Choose a circuit to start the session."}
           </p>
 
@@ -25,13 +43,21 @@ const WipPage = () => {
             {track ? (
               <>
                 <Suspense fallback={null}>
-                  {track === "neon-city-8" ? <NeonCityScene key={track} /> : <WipScene key={track} />}
+                  {track === "neon-city-8" ? (
+                    <NeonCityScene key={sceneKey} onSnapshot={onSnapshot} />
+                  ) : (
+                    <WipScene key={sceneKey} onSnapshot={onSnapshot} />
+                  )}
                 </Suspense>
+
+                {snap && <RaceHud snap={snap} />}
+                {snap && <Countdown snap={snap} />}
+
                 <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3">
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setTrack(null)}
+                    onClick={exit}
                     className="pointer-events-auto glass neon-border-cyan font-pixel text-[9px] text-primary hover:neon-glow-cyan"
                   >
                     <ChevronLeft className="mr-1 h-3 w-3" />
@@ -41,6 +67,10 @@ const WipPage = () => {
                     {track}
                   </span>
                 </div>
+
+                {snap?.status === "finished" && (
+                  <Podium snap={snap} onRestart={restart} onExit={exit} />
+                )}
               </>
             ) : (
               <TrackSelectMenu onSelect={setTrack} />
