@@ -32,7 +32,7 @@ function pointAt(t: number, out = new THREE.Vector3()) {
   return out.set(AX * Math.sin(t), heightAt(t), (BZ / 2) * Math.sin(2 * t));
 }
 
-type Sample = { p: THREE.Vector3; n: THREE.Vector3 }; // n = lateral (right) unit vector in XZ
+// Sample: { p, n } where n = lateral (right) unit vector in XZ
 
 function buildSamples(): Sample[] {
   const arr: Sample[] = [];
