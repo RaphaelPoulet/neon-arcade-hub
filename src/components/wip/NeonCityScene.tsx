@@ -383,134 +383,15 @@ function City() {
   );
 }
 
-// ------------------------------- tank ---------------------------------------
+// ------------------------------- race config --------------------------------
 const MAX_SPEED = 30;
 const ACCEL = 16;
 const BRAKE = 22;
 const DRAG = 1.6;
 const TURN_SPEED = 1.5;
 
-function useKeys() {
-  const keys = useRef<Record<string, boolean>>({});
-  if (!(keys.current as any).__bound) {
-    (keys.current as any).__bound = true;
-    const down = (e: KeyboardEvent) => {
-      keys.current[e.code] = true;
-      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
-    };
-    const up = (e: KeyboardEvent) => (keys.current[e.code] = false);
-    window.addEventListener("keydown", down, { passive: false });
-    window.addEventListener("keyup", up);
-  }
-  return keys;
-}
+const START_IDX = Math.round((0.35 / (Math.PI * 2)) * SAMPLES);
 
-function Tank({ samples }: { samples: Sample[] }) {
-  const group = useRef<THREE.Group>(null!);
-  const tilt = useRef<THREE.Group>(null!);
-  const speed = useRef(0);
-  const yawVel = useRef(0);
-  const idx = useRef(Math.round((0.35 / (Math.PI * 2)) * SAMPLES));
-  const keys = useKeys();
-  const camPos = new THREE.Vector3();
-  const camTarget = new THREE.Vector3();
-  const moveDir = new THREE.Vector3();
-
-  useFrame((state, rawDelta) => {
-    const delta = Math.min(rawDelta, 0.05);
-    const k = keys.current;
-    const tank = group.current;
-
-    const fwd = (k.ArrowUp || k.KeyW || k.KeyZ ? 1 : 0) - (k.ArrowDown || k.KeyS ? 1 : 0);
-    if (fwd > 0) speed.current += ACCEL * delta;
-    else if (fwd < 0) speed.current -= BRAKE * delta;
-    else speed.current -= speed.current * DRAG * delta;
-    speed.current = THREE.MathUtils.clamp(speed.current, -MAX_SPEED * 0.35, MAX_SPEED);
-    if (Math.abs(speed.current) < 0.02) speed.current = 0;
-
-    const turnInput = (k.ArrowLeft || k.KeyA || k.KeyQ ? 1 : 0) - (k.ArrowRight || k.KeyD ? 1 : 0);
-    const grip = 0.45 + 0.55 * Math.min(1, Math.abs(speed.current) / (MAX_SPEED * 0.4));
-    const targetYaw = turnInput * TURN_SPEED * grip;
-    yawVel.current += (targetYaw - yawVel.current) * Math.min(1, delta * 6);
-    tank.rotation.y += yawVel.current * delta;
-
-    if (speed.current !== 0) {
-      moveDir.set(Math.sin(tank.rotation.y), 0, Math.cos(tank.rotation.y));
-      tank.position.addScaledVector(moveDir, speed.current * delta);
-    }
-
-    // --- locate the nearest centerline sample, searching around the previous
-    // index so the two overlapping branches of the 8 never get confused ---
-    let best = idx.current;
-    let bestD = Infinity;
-    const win = 90;
-    for (let o = -win; o <= win; o++) {
-      const i = (idx.current + o + SAMPLES) % SAMPLES;
-      const p = samples[i].p;
-      const dx = tank.position.x - p.x;
-      const dz = tank.position.z - p.z;
-      const d = dx * dx + dz * dz;
-      if (d < bestD) {
-        bestD = d;
-        best = i;
-      }
-    }
-    idx.current = best;
-    const s = samples[best];
-    const lateral = (tank.position.x - s.p.x) * s.n.x + (tank.position.z - s.p.z) * s.n.z;
-    const onRoad = Math.abs(lateral) <= ROAD_HALF + 0.6;
-
-    // guardrails: while elevated, never allow leaving the deck
-    if (s.p.y > 0.5) {
-      const lim = ROAD_HALF - 0.9;
-      if (Math.abs(lateral) > lim) {
-        const corr = lateral - Math.sign(lateral) * lim;
-        tank.position.x -= s.n.x * corr;
-        tank.position.z -= s.n.z * corr;
-        speed.current *= 0.55;
-      }
-    } else if (!onRoad) {
-      // off-road: dirt slows the tank hard
-      speed.current *= 1 - Math.min(0.9, 3.2 * delta);
-    }
-
-    // ground locking: follow the road surface height, flat ground elsewhere
-    const targetY = onRoad || s.p.y > 0.5 ? s.p.y : 0;
-    tank.position.y = THREE.MathUtils.lerp(tank.position.y, targetY, 1 - Math.pow(0.0001, delta));
-
-    // keep everything inside the city block
-    const LIM = 520;
-    tank.position.x = THREE.MathUtils.clamp(tank.position.x, -LIM, LIM);
-    tank.position.z = THREE.MathUtils.clamp(tank.position.z, -LIM, LIM);
-
-    tank.rotation.x = 0;
-    tank.rotation.z = 0;
-
-    const t = tilt.current;
-    t.rotation.z = THREE.MathUtils.lerp(t.rotation.z, -yawVel.current * 0.05, 0.1);
-    t.rotation.x = THREE.MathUtils.lerp(t.rotation.x, -speed.current * 0.004, 0.08);
-
-    const behind = new THREE.Vector3(0, 4.2, -9).applyEuler(new THREE.Euler(0, tank.rotation.y, 0));
-    camPos.copy(tank.position).add(behind);
-    state.camera.position.lerp(camPos, 1 - Math.pow(0.0015, delta));
-    camTarget.copy(tank.position).add(new THREE.Vector3(0, 1.6, 0));
-    state.camera.lookAt(camTarget);
-  });
-
-  const start = pointAt(0.35);
-  const startAhead = pointAt(0.4);
-  const yaw = Math.atan2(startAhead.x - start.x, startAhead.z - start.z);
-
-  return (
-    <group ref={group} position={[start.x, start.y, start.z]} rotation={[0, yaw, 0]}>
-      <group ref={tilt} position={[0, 0.35, 0]}>
-        <group position={[0, -0.35, 0]}>
-          <TankBody hull="#ff7a18" hullLight="#ffb347" turret="#ffd08a" metalness={0.85} roughness={0.22} />
-        </group>
-      </group>
-    </group>
-  );
-}
 
 const NeonCityScene = () => {
   const samples = useMemo(buildSamples, []);
