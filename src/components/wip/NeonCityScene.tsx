@@ -439,7 +439,7 @@ const NeonCityScene = ({ onSnapshot }: { onSnapshot?: (s: RaceSnapshot) => void 
 
       <Circuit samples={samples} />
       <City />
-      <Tank samples={samples} />
+      <Racers cfg={cfg} onSnapshot={onSnapshot} camHeight={4.6} camBack={11} />
     </Canvas>
   );
 };
