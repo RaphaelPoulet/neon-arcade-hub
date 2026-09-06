@@ -2,6 +2,8 @@ import { useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Grid } from "@react-three/drei";
 import * as THREE from "three";
+import Racers from "./Racers";
+import type { Sample, TrackConfig } from "./raceCore";
 
 const MAX_SPEED = 9;
 const ACCEL = 9;
@@ -266,7 +268,21 @@ export function buildOvalSamples(): Sample[] {
   return arr;
 }
 
-const WipScene = () => {
+const OVAL_CFG: TrackConfig = {
+  samples: buildOvalSamples(),
+  startIdx: 0,
+  roadHalf: TRACK_HALF_W,
+  physics: {
+    maxSpeed: MAX_SPEED,
+    accel: ACCEL,
+    brake: BRAKE,
+    drag: DRAG,
+    turnSpeed: TURN_SPEED,
+  },
+  clampAlways: true,
+};
+
+const WipScene = ({ onSnapshot }: { onSnapshot?: (s: import("./raceCore").RaceSnapshot) => void }) => {
   return (
     <Canvas shadows camera={{ position: [0, 4, -8], fov: 60 }} dpr={[1, 2]}>
       <color attach="background" args={["#2a1a4d"]} />
@@ -310,7 +326,7 @@ const WipScene = () => {
 
 
       <Track />
-      <Tank />
+      <Racers cfg={OVAL_CFG} onSnapshot={onSnapshot} />
     </Canvas>
   );
 };
