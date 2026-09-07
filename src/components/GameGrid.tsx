@@ -3,6 +3,7 @@ import gameSnake from "@/assets/game-snake.jpg";
 import gameInvaders from "@/assets/game-invaders.jpg";
 import gamePacman from "@/assets/game-pacman.jpg";
 import gamePinball from "@/assets/game-pinball.jpg";
+import gameTankRacing from "@/assets/game-tank-racing.jpg";
 
 const games = [
   {
@@ -32,6 +33,13 @@ const games = [
     image: gamePinball,
     highScore: 0,
     slug: "neon-pinball",
+  },
+  {
+    title: "tank racing (WIP)",
+    description: "3D neon tank racing on a figure-8 city overpass. Three AI rivals, cannons and spin-outs.",
+    image: gameTankRacing,
+    highScore: 0,
+    slug: "wip",
   },
 ];
 
