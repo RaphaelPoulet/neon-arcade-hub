@@ -173,12 +173,26 @@ export function createRace(cfg: TrackConfig): Race {
       lineOffset: isPlayer ? 0 : bot.line,
       skill: isPlayer ? 1 : bot.skill,
       phase: isPlayer ? 0 : i * 2.1 + 0.7,
+      cooldown: 0,
+      spin: 0,
+      spinDir: 1,
+      muzzle: 0,
       roll: 0,
       pitch: 0,
     });
   }
 
-  return { cfg, cps, racers, elapsed: 0, countdown: 3.2, status: "countdown" };
+  return {
+    cfg,
+    cps,
+    racers,
+    elapsed: 0,
+    countdown: 3.2,
+    status: "countdown",
+    projectiles: [],
+    projSeq: 0,
+  };
+
 }
 
 function relocate(race: Race, r: Racer) {
