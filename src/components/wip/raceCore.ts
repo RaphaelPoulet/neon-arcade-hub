@@ -295,23 +295,93 @@ function aiInput(race: Race, r: Racer): Input {
 function drive(race: Race, r: Racer, input: Input, delta: number) {
   const ph = race.cfg.physics;
   const cap = ph.maxSpeed * (r.isPlayer ? 1 : 0.9 + r.skill * 0.12);
+  const spinning = r.spin > 0;
 
-  if (input.throttle > 0) r.speed += ph.accel * input.throttle * delta;
-  else if (input.throttle < 0) r.speed += ph.brake * input.throttle * delta;
-  else r.speed -= r.speed * ph.drag * delta;
+  const throttle = spinning ? 0 : input.throttle;
+  if (throttle > 0) r.speed += ph.accel * throttle * delta;
+  else if (throttle < 0) r.speed += ph.brake * throttle * delta;
+  else r.speed -= r.speed * ph.drag * (spinning ? 2.4 : 1) * delta;
   r.speed = THREE.MathUtils.clamp(r.speed, -cap * 0.35, cap);
   if (Math.abs(r.speed) < 0.02) r.speed = 0;
 
-  const grip = 0.45 + 0.55 * Math.min(1, Math.abs(r.speed) / (ph.maxSpeed * 0.4));
-  const targetYaw = input.steer * ph.turnSpeed * grip;
-  r.yawVel += (targetYaw - r.yawVel) * Math.min(1, delta * 6);
-  r.yaw += r.yawVel * delta;
+  if (spinning) {
+    // Mario-Kart style slip: the tank whirls and the driver has no steering
+    r.spin = Math.max(0, r.spin - delta);
+    r.yawVel = r.spinDir * 7.5 * (0.35 + r.spin / SPIN_TIME);
+    r.yaw += r.yawVel * delta;
+  } else {
+    const grip = 0.45 + 0.55 * Math.min(1, Math.abs(r.speed) / (ph.maxSpeed * 0.4));
+    const targetYaw = input.steer * ph.turnSpeed * grip;
+    r.yawVel += (targetYaw - r.yawVel) * Math.min(1, delta * 6);
+    r.yaw += r.yawVel * delta;
+  }
 
   if (r.speed !== 0) {
     r.pos.x += Math.sin(r.yaw) * r.speed * delta;
     r.pos.z += Math.cos(r.yaw) * r.speed * delta;
   }
 }
+
+// ------------------------------- combat -------------------------------------
+function fire(race: Race, r: Racer) {
+  if (r.cooldown > 0 || r.spin > 0) return;
+  r.cooldown = FIRE_COOLDOWN;
+  r.muzzle = 0.18;
+  const dx = Math.sin(r.yaw);
+  const dz = Math.cos(r.yaw);
+  race.projectiles.push({
+    id: race.projSeq++,
+    owner: r.id,
+    pos: new THREE.Vector3(r.pos.x + dx * 2.4, r.pos.y + 1.15, r.pos.z + dz * 2.4),
+    vel: new THREE.Vector3(dx * (PROJ_SPEED + Math.max(0, r.speed)), 0, dz * (PROJ_SPEED + Math.max(0, r.speed))),
+    life: PROJ_LIFE,
+    color: r.colors.hull,
+  });
+  // recoil kick backwards
+  r.speed -= RECOIL;
+  r.pos.x -= dx * 0.35;
+  r.pos.z -= dz * 0.35;
+  r.pitch += 0.12;
+}
+
+/** bots shoot when a rival sits in their sights */
+function aiWantsToFire(race: Race, r: Racer) {
+  if (r.cooldown > 0 || r.spin > 0) return false;
+  for (const o of race.racers) {
+    if (o === r || o.spin > 0) continue;
+    const dx = o.pos.x - r.pos.x;
+    const dz = o.pos.z - r.pos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > 70 || dist < 4) continue;
+    const aim = wrapAngle(Math.atan2(dx, dz) - r.yaw);
+    if (Math.abs(aim) < 0.12 + 0.05 * (1 - r.skill)) return true;
+  }
+  return false;
+}
+
+function stepProjectiles(race: Race, delta: number) {
+  const ps = race.projectiles;
+  for (let i = ps.length - 1; i >= 0; i--) {
+    const p = ps[i];
+    p.pos.x += p.vel.x * delta;
+    p.pos.z += p.vel.z * delta;
+    p.life -= delta;
+    let hit = false;
+    for (const o of race.racers) {
+      if (o.id === p.owner || o.finished) continue;
+      const d = Math.hypot(o.pos.x - p.pos.x, o.pos.z - p.pos.z);
+      if (d < PROJ_R + RACER_R && Math.abs(o.pos.y + 1 - p.pos.y) < 4) {
+        o.spin = SPIN_TIME;
+        o.spinDir = Math.sign(Math.sin(p.pos.x * 12.9898 + p.pos.z * 78.233)) || 1;
+        o.speed *= 0.45;
+        hit = true;
+        break;
+      }
+    }
+    if (hit || p.life <= 0) ps.splice(i, 1);
+  }
+}
+
 
 function trackConstraints(race: Race, r: Racer, delta: number) {
   const { roadHalf, clampAlways } = race.cfg;
