@@ -1,6 +1,5 @@
 import { Suspense, useCallback, useState } from "react";
 import Navbar from "@/components/Navbar";
-import WipScene from "@/components/wip/WipScene";
 import NeonCityScene from "@/components/wip/NeonCityScene";
 import TrackSelectMenu, { type TrackId } from "@/components/wip/TrackSelectMenu";
 import { RaceHud, Countdown, Podium } from "@/components/wip/RaceOverlay";
@@ -35,7 +34,7 @@ const WipPage = () => {
           <h1 className="text-2xl font-bold tracking-widest text-primary">WIP RACING</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {track
-              ? "W / Up = accelerate · S / Down = reverse / brake · A / D or Left / Right = steer · 3 laps vs VOLT, AMPER & HEX"
+              ? "W / Up = accelerate · S / Down = brake · A / D = steer · SPACE = fire (10s reload) · 3 laps vs VOLT, AMPER & HEX"
               : "Choose a circuit to start the session."}
           </p>
 
@@ -43,11 +42,7 @@ const WipPage = () => {
             {track ? (
               <>
                 <Suspense fallback={null}>
-                  {track === "neon-city-8" ? (
-                    <NeonCityScene key={sceneKey} onSnapshot={onSnapshot} />
-                  ) : (
-                    <WipScene key={sceneKey} onSnapshot={onSnapshot} />
-                  )}
+                  <NeonCityScene key={sceneKey} onSnapshot={onSnapshot} />
                 </Suspense>
 
                 {snap && <RaceHud snap={snap} />}
