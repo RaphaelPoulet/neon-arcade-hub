@@ -31,10 +31,16 @@ export type Racer = {
   lineOffset: number;
   skill: number;
   phase: number;
+  // combat
+  cooldown: number;
+  spin: number;
+  spinDir: number;
+  muzzle: number;
   // cosmetic
   roll: number;
   pitch: number;
 };
+
 
 export type Physics = {
   maxSpeed: number;
@@ -57,7 +63,24 @@ export const TOTAL_LAPS = 3;
 export const CP_COUNT = 8;
 export const RACER_R = 1.35;
 
+// ---- combat tuning ----
+export const FIRE_COOLDOWN = 10; // seconds between shots
+const PROJ_SPEED = 70;
+const PROJ_LIFE = 2.2;
+const PROJ_R = 2.2;
+const RECOIL = 7; // instant backward impulse on the shooter
+const SPIN_TIME = 1.7; // loss of control on hit
+
 export type RaceStatus = "countdown" | "racing" | "finished";
+
+export type Projectile = {
+  id: number;
+  owner: number;
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  life: number;
+  color: string;
+};
 
 export type Race = {
   cfg: TrackConfig;
@@ -66,9 +89,12 @@ export type Race = {
   elapsed: number;
   countdown: number;
   status: RaceStatus;
+  projectiles: Projectile[];
+  projSeq: number;
 };
 
-export type Input = { throttle: number; steer: number };
+export type Input = { throttle: number; steer: number; fire?: boolean };
+
 
 export const PLAYER_COLORS: RacerColors = {
   hull: "#ff7a18",
