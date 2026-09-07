@@ -485,16 +485,23 @@ export function stepRace(race: Race, rawDelta: number, playerInput: Input) {
   if (live) race.elapsed += delta;
 
   for (const r of race.racers) {
+    r.cooldown = Math.max(0, r.cooldown - delta);
+    r.muzzle = Math.max(0, r.muzzle - delta);
     const input: Input =
       !live || r.finished
         ? { throttle: r.finished ? -0.4 : 0, steer: r.finished ? 0 : 0 }
         : r.isPlayer
           ? playerInput
           : aiInput(race, r);
+    if (live && !r.finished) {
+      if (r.isPlayer ? !!playerInput.fire : aiWantsToFire(race, r)) fire(race, r);
+    }
     drive(race, r, input, delta);
   }
 
+  stepProjectiles(race, delta);
   resolveContacts(race);
+
 
   for (const r of race.racers) {
     trackConstraints(race, r, delta);
