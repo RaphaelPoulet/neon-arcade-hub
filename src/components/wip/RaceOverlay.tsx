@@ -1,10 +1,12 @@
 import { Button } from "@/components/ui/button";
-import { Trophy, Medal, Award, RotateCcw, ListVideo } from "lucide-react";
-import { formatTime, type RaceSnapshot } from "./raceCore";
+import { Trophy, Medal, Award, RotateCcw, ListVideo, Crosshair } from "lucide-react";
+import { FIRE_COOLDOWN, formatTime, type RaceSnapshot } from "./raceCore";
 
 const ORDINAL = ["", "1ST", "2ND", "3RD", "4TH"];
 
 export function RaceHud({ snap }: { snap: RaceSnapshot }) {
+  const ready = snap.cooldown <= 0;
+  const pct = Math.max(0, Math.min(1, 1 - snap.cooldown / FIRE_COOLDOWN));
   return (
     <div className="pointer-events-none absolute inset-x-0 top-14 flex items-start justify-between px-3">
       <div className="glass rounded-md px-3 py-2 font-pixel text-[9px] leading-5 text-primary">
@@ -13,6 +15,17 @@ export function RaceHud({ snap }: { snap: RaceSnapshot }) {
         </div>
         <div className="text-secondary">POS {ORDINAL[snap.place]}/4</div>
         <div className="text-foreground/80">{formatTime(snap.elapsed)}</div>
+        <div className={`mt-1 flex items-center gap-1 ${ready ? "text-primary" : "text-muted-foreground"}`}>
+          <Crosshair className="h-3 w-3" />
+          <span>{ready ? "FIRE!" : `${Math.ceil(snap.cooldown)}s`}</span>
+        </div>
+        <div className="mt-1 h-1 w-20 overflow-hidden rounded-full bg-muted/40">
+          <div
+            className={`h-full ${ready ? "bg-primary" : "bg-secondary"}`}
+            style={{ width: `${pct * 100}%` }}
+          />
+        </div>
+        {snap.spinning && <div className="mt-1 text-secondary">SPIN OUT!</div>}
       </div>
       <div className="glass rounded-md px-3 py-2 font-pixel text-[8px] leading-5">
         {snap.standings.map((s) => (
@@ -26,6 +39,7 @@ export function RaceHud({ snap }: { snap: RaceSnapshot }) {
     </div>
   );
 }
+
 
 export function Countdown({ snap }: { snap: RaceSnapshot }) {
   if (snap.status !== "countdown") return null;
