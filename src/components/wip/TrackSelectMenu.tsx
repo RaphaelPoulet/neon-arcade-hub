@@ -1,15 +1,8 @@
 import { Lock } from "lucide-react";
 
-export type TrackId = "test" | "neon-city-8";
+export type TrackId = "neon-city-8";
 
 const TRACKS = [
-  {
-    id: "test" as TrackId,
-    name: "TEST",
-    subtitle: "Stadium Oval",
-    desc: "Two straights, two sweeping curves. Neon asphalt.",
-    available: true,
-  },
   {
     id: "neon-city-8" as TrackId,
     name: "NEON CITY 8",
@@ -22,6 +15,13 @@ const TRACKS = [
     name: "CYBER CITY",
     subtitle: "Coming Soon",
     desc: "Rain-slick streets under endless holograms.",
+    available: false,
+  },
+  {
+    id: "sunset-ridge",
+    name: "SUNSET RIDGE",
+    subtitle: "Coming Soon",
+    desc: "Cliffside hairpins above a burning horizon.",
     available: false,
   },
 ];

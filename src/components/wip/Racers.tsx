@@ -140,6 +140,8 @@ export default function Racers({ cfg, onSnapshot, camHeight = 4.2, camBack = 9 }
           )}
         </group>
       ))}
+      <group ref={shots} />
+
     </>
   );
 }
