@@ -550,7 +550,10 @@ export type RaceSnapshot = {
   lap: number;
   totalLaps: number;
   place: number;
+  cooldown: number;
+  spinning: boolean;
   standings: { id: number; name: string; place: number; laps: number; time: number; finished: boolean; color: string }[];
+
 };
 
 export function snapshot(race: Race): RaceSnapshot {
@@ -562,6 +565,9 @@ export function snapshot(race: Race): RaceSnapshot {
     lap: Math.min(TOTAL_LAPS, player.laps + 1),
     totalLaps: TOTAL_LAPS,
     place: player.place,
+    cooldown: player.cooldown,
+    spinning: player.spin > 0,
+
     standings: [...race.racers]
       .sort((a, b) => a.place - b.place)
       .map((r) => ({
