@@ -82,6 +82,35 @@ function ribbon(samples: Sample[], inner: number, outer: number, yOff: number) {
   return g;
 }
 
+// horizontal strip between two lateral offsets, only over samples i0..i1
+function ribbonRange(samples: Sample[], i0: number, i1: number, inner: number, outer: number, yOff: number) {
+  const g = new THREE.BufferGeometry();
+  const pos: number[] = [];
+  const idx: number[] = [];
+  let n = 0;
+  for (let i = i0; i <= i1; i++) {
+    const s = samples[(i + samples.length) % samples.length];
+    pos.push(
+      s.p.x + s.n.x * inner,
+      s.p.y + yOff,
+      s.p.z + s.n.z * inner,
+      s.p.x + s.n.x * outer,
+      s.p.y + yOff,
+      s.p.z + s.n.z * outer,
+    );
+    n++;
+  }
+  for (let i = 0; i < n - 1; i++) {
+    const a = i * 2;
+    const b = (i + 1) * 2;
+    idx.push(a, a + 1, b, b, a + 1, b + 1);
+  }
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
 // vertical wall strip following the samples between i0..i1 at lateral offset
 function barrier(samples: Sample[], i0: number, i1: number, off: number, yBase: number, h: number) {
   const g = new THREE.BufferGeometry();
@@ -209,23 +238,14 @@ function Circuit({ samples }: { samples: Sample[] }) {
 
   // guardrails on the elevated portion + support pillars
   const bridge = useMemo(() => {
-    const rails: { pos: [number, number, number]; rot: number; len: number }[] = [];
     const pillars: { pos: [number, number, number]; h: number }[] = [];
     for (let i = 0; i < SAMPLES; i++) {
       const s = samples[i];
       if (s.p.y < 0.6) continue;
-      if (i % 6 === 0) {
-        const rot = Math.atan2(s.n.z, s.n.x);
-        for (const side of [-1, 1]) {
-          rails.push({
-            pos: [s.p.x + s.n.x * side * (ROAD_HALF + 0.4), s.p.y + 0.65, s.p.z + s.n.z * side * (ROAD_HALF + 0.4)],
-            rot: -rot,
-            len: 3.4,
-          });
-        }
-      }
-      if (i % 46 === 0 && s.p.y > 2.2) {
-        pillars.push({ pos: [s.p.x, s.p.y / 2, s.p.z], h: s.p.y });
+      if (i % 46 === 0 && s.p.y > 4.5) {
+        // top of the pillar stops just below the bridge soffit
+        const h = s.p.y - 2.1;
+        pillars.push({ pos: [s.p.x, h / 2, s.p.z], h });
       }
     }
     // contiguous elevated index range (bump is centered on t = PI)
@@ -241,7 +261,8 @@ function Circuit({ samples }: { samples: Sample[] }) {
       glow: barrier(samples, i0, i1, side * (ROAD_HALF + 2.2), -0.55, 0.18),
       side,
     }));
-    return { rails, pillars, walls };
+    const soffit = ribbonRange(samples, i0, i1, ROAD_HALF + 2.2, -ROAD_HALF - 2.2, -1.6);
+    return { pillars, walls, soffit };
   }, [samples]);
 
   return (
@@ -256,7 +277,7 @@ function Circuit({ samples }: { samples: Sample[] }) {
         <meshStandardMaterial color={NEON_CYAN} emissive={NEON_CYAN} emissiveIntensity={2.2} toneMapped={false} />
       </mesh>
       <mesh geometry={geo.edgeR}>
-        <meshStandardMaterial color={NEON_PINK} emissive={NEON_PINK} emissiveIntensity={2.2} toneMapped={false} />
+        <meshStandardMaterial color={NEON_CYAN} emissive={NEON_CYAN} emissiveIntensity={2.2} toneMapped={false} />
       </mesh>
       <mesh geometry={geo.mid}>
         <meshStandardMaterial color="#cfc9ff" emissive="#cfc9ff" emissiveIntensity={0.7} />
@@ -281,8 +302,8 @@ function Circuit({ samples }: { samples: Sample[] }) {
           </mesh>
           <mesh geometry={w.cap}>
             <meshStandardMaterial
-              color={w.side < 0 ? NEON_CYAN : NEON_PINK}
-              emissive={w.side < 0 ? NEON_CYAN : NEON_PINK}
+              color={NEON_CYAN}
+              emissive={NEON_CYAN}
               emissiveIntensity={2.6}
               toneMapped={false}
               side={THREE.DoubleSide}
@@ -302,12 +323,9 @@ function Circuit({ samples }: { samples: Sample[] }) {
           </mesh>
         </group>
       ))}
-      {bridge.rails.map((r, i) => (
-        <mesh key={`r${i}`} position={r.pos} rotation={[0, r.rot, 0]}>
-          <boxGeometry args={[r.len, 0.9, 0.35]} />
-          <meshStandardMaterial color="#2a1f4d" emissive={NEON_PURPLE} emissiveIntensity={1.1} metalness={0.6} roughness={0.4} />
-        </mesh>
-      ))}
+      <mesh geometry={bridge.soffit} castShadow receiveShadow>
+        <meshStandardMaterial color="#1a1330" metalness={0.4} roughness={0.75} side={THREE.DoubleSide} />
+      </mesh>
       {bridge.pillars.map((p, i) => (
         <mesh key={`p${i}`} position={p.pos} castShadow>
           <boxGeometry args={[3, p.h, 3]} />
