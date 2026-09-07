@@ -45,7 +45,10 @@ export default function Racers({ cfg, onSnapshot, camHeight = 4.2, camBack = 9 }
 
   const groups = useRef<(THREE.Group | null)[]>([]);
   const tilts = useRef<(THREE.Group | null)[]>([]);
+  const shots = useRef<THREE.Group | null>(null);
+  const pool = useRef<THREE.Mesh[]>([]);
   const acc = useRef(0);
+  const firedHeld = useRef(false);
   const camPos = useMemo(() => new THREE.Vector3(), []);
   const camTarget = useMemo(() => new THREE.Vector3(), []);
   const behind = useMemo(() => new THREE.Vector3(), []);
@@ -53,11 +56,38 @@ export default function Racers({ cfg, onSnapshot, camHeight = 4.2, camBack = 9 }
 
   useFrame((state, rawDelta) => {
     const k = keys.current;
+    const fireKey = !!(k.Space || k.KeyF || k.ControlLeft);
+    const fire = fireKey && !firedHeld.current;
+    firedHeld.current = fireKey;
     const input: Input = {
       throttle: (k.ArrowUp || k.KeyW || k.KeyZ ? 1 : 0) - (k.ArrowDown || k.KeyS ? 1 : 0),
       steer: (k.ArrowLeft || k.KeyA || k.KeyQ ? 1 : 0) - (k.ArrowRight || k.KeyD ? 1 : 0),
+      fire,
     };
     stepRace(race, rawDelta, input);
+
+    // projectiles: reuse a small pool of glowing bolts
+    const grp = shots.current;
+    if (grp) {
+      while (pool.current.length < race.projectiles.length) {
+        const m = new THREE.Mesh(
+          new THREE.SphereGeometry(0.45, 10, 8),
+          new THREE.MeshStandardMaterial({ color: "#ffffff", emissive: "#ffffff", emissiveIntensity: 3, toneMapped: false }),
+        );
+        pool.current.push(m);
+        grp.add(m);
+      }
+      pool.current.forEach((m, i) => {
+        const p = race.projectiles[i];
+        m.visible = !!p;
+        if (p) {
+          m.position.copy(p.pos);
+          (m.material as THREE.MeshStandardMaterial).color.set(p.color);
+          (m.material as THREE.MeshStandardMaterial).emissive.set(p.color);
+        }
+      });
+    }
+
 
     race.racers.forEach((r, i) => {
       const g = groups.current[i];
