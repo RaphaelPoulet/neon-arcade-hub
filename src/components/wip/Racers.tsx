@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { TankBody } from "./WipScene";
+import { unlockAudio } from "@/lib/arcadeAudio";
 import {
   createRace,
   snapshot,
@@ -16,6 +17,7 @@ function useKeys() {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       keys.current[e.code] = true;
+      unlockAudio();
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
     };
     const up = (e: KeyboardEvent) => (keys.current[e.code] = false);

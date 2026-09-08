@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { sfxCannon, sfxCountdownBeep, sfxGo, sfxHitConfirm, sfxSpinOut } from "@/lib/arcadeAudio";
 
 // ---------------------------------------------------------------------------
 // Shared racing core: waypoint parsing, AI drivers, pushing collisions,
@@ -65,6 +66,7 @@ export const RACER_R = 1.35;
 
 // ---- combat tuning ----
 export const FIRE_COOLDOWN = 10; // seconds between shots
+export const START_FIRE_LOCK = 2; // no shooting for the first seconds of the race
 const PROJ_SPEED = 70;
 const PROJ_LIFE = 2.2;
 const PROJ_R = 2.2;
@@ -91,6 +93,7 @@ export type Race = {
   status: RaceStatus;
   projectiles: Projectile[];
   projSeq: number;
+  lastBeep: number;
 };
 
 export type Input = { throttle: number; steer: number; fire?: boolean };
@@ -191,6 +194,7 @@ export function createRace(cfg: TrackConfig): Race {
     status: "countdown",
     projectiles: [],
     projSeq: 0,
+    lastBeep: 4,
   };
 
 }
@@ -326,6 +330,7 @@ function drive(race: Race, r: Racer, input: Input, delta: number) {
 function fire(race: Race, r: Racer) {
   if (r.cooldown > 0 || r.spin > 0) return;
   r.cooldown = FIRE_COOLDOWN;
+  sfxCannon();
   r.muzzle = 0.18;
   const dx = Math.sin(r.yaw);
   const dz = Math.cos(r.yaw);
@@ -372,6 +377,9 @@ function stepProjectiles(race: Race, delta: number) {
       const d = Math.hypot(o.pos.x - p.pos.x, o.pos.z - p.pos.z);
       if (d < PROJ_R + RACER_R && Math.abs(o.pos.y + 1 - p.pos.y) < 4) {
         o.spin = SPIN_TIME;
+        sfxSpinOut();
+        const owner = race.racers.find((x) => x.id === p.owner);
+        if (owner?.isPlayer) sfxHitConfirm();
         o.spinDir = Math.sign(Math.sin(p.pos.x * 12.9898 + p.pos.z * 78.233)) || 1;
         o.speed *= 0.45;
         hit = true;
@@ -479,7 +487,16 @@ export function stepRace(race: Race, rawDelta: number, playerInput: Input) {
 
   if (race.status === "countdown") {
     race.countdown -= delta;
-    if (race.countdown <= 0) race.status = "racing";
+    const n = Math.min(3, Math.ceil(race.countdown));
+    if (n < race.lastBeep && n > 0) {
+      race.lastBeep = n;
+      sfxCountdownBeep();
+    }
+    if (race.countdown <= 0) {
+      race.status = "racing";
+      race.lastBeep = 0;
+      sfxGo();
+    }
   }
   const live = race.status === "racing";
   if (live) race.elapsed += delta;
@@ -493,7 +510,7 @@ export function stepRace(race: Race, rawDelta: number, playerInput: Input) {
         : r.isPlayer
           ? playerInput
           : aiInput(race, r);
-    if (live && !r.finished) {
+    if (live && !r.finished && race.elapsed >= START_FIRE_LOCK) {
       if (r.isPlayer ? !!playerInput.fire : aiWantsToFire(race, r)) fire(race, r);
     }
     drive(race, r, input, delta);
