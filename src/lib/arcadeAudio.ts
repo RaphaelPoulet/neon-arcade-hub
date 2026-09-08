@@ -124,3 +124,44 @@ export function sfxDrain(gameOver = false) {
   tone(a, "sine", 110, 0.4, 0.35, 35, thudAt);
   noise(a, 0.25, 0.18, 60, 600, thudAt);
 }
+
+/** Pre-race countdown beep (3, 2, 1). */
+export function sfxCountdownBeep() {
+  const a = ac();
+  if (!a) return;
+  tone(a, "square", 440, 0.16, 0.22);
+  tone(a, "sine", 880, 0.12, 0.08);
+}
+
+/** Higher, brighter tone for the GO! signal. */
+export function sfxGo() {
+  const a = ac();
+  if (!a) return;
+  tone(a, "square", 880, 0.3, 0.26);
+  tone(a, "sawtooth", 1320, 0.35, 0.12, 1760);
+}
+
+/** Punchy retro cannon blast. */
+export function sfxCannon() {
+  const a = ac();
+  if (!a || !throttled("cannon", 60)) return;
+  tone(a, "sawtooth", 720, 0.18, 0.26, 90);
+  tone(a, "square", 180, 0.22, 0.2, 45);
+  noise(a, 0.22, 0.3, 200, 5000);
+}
+
+/** Success chime for the shooter landing a hit. */
+export function sfxHitConfirm() {
+  const a = ac();
+  if (!a) return;
+  [784, 1046, 1568].forEach((f, i) => tone(a, "triangle", f, 0.14, 0.18, f, i * 0.06));
+}
+
+/** Electrical crash / glitch for the tank that gets hit. */
+export function sfxSpinOut() {
+  const a = ac();
+  if (!a || !throttled("spinout", 80)) return;
+  noise(a, 0.35, 0.35, 300, 7000);
+  tone(a, "square", 300, 0.35, 0.2, 60);
+  tone(a, "sawtooth", 520, 0.3, 0.14, 90, 0.05);
+}
