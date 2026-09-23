@@ -1,73 +1,68 @@
-# Welcome to your Lovable project
+# Neon Arcade Hub
 
-## Project info
+### Project Vision
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+Build a modern and immersive "Retro Mini-Games Arcade" platform. The site serves as a central hub (Lobby) to navigate between different games like Snake, Space Invaders, and Pac-Man. Target audience: Nostalgia fans and casual gamers looking for a quick, fluid experience.
 
-## How can I edit this code?
+### Design & Aesthetic (Style Buzzwords)
 
-There are several ways of editing your application.
+Apply a "Neo-Retro Arcade" aesthetic:
 
-**Use Lovable**
+- Theme: Deep Dark Mode with Neon accents (Cyber Blue and Hot Pink).
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- UI Patterns: Use "Glassmorphism" for game cards with subtle glowing borders.
 
-Changes made via Lovable will be committed automatically to this repo.
+- Typography: Use "Inter" for UI elements and a pixel-style font (like "Press Start 2P") strictly for game titles and high scores.
 
-**Use your preferred IDE**
+- Vibe: Premium, cinematic, and high-energy.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Atomic Components
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+1. **Sticky Navbar:** Include a "RetroArcade" logo, a "Leaderboard" link, and a User Profile placeholder.
 
-Follow these steps:
+2. **Hero Section:** Headline: "Retro Gaming, Reimagined." Subtext: "Instant classics, zero lag." CTA: "Play Game of the Day."
+
+3. **Responsive Game Grid:** A grid of cards. Each card must feature:
+
+   - A pixel-art style thumbnail (placeholder).
+
+   - Game Title (e.g., "Neon Snake", "Void Invaders").
+
+   - Real description (e.g., "The timeless classic revisited in 60fps").
+
+   - A "High Score" badge with a mock value.
+
+4. **Footer:** Social links and a "Made for Gamers" tagline.
+
+### Logic & States
+
+- Setup React Router for seamless navigation between the Lobby and Game pages.
+
+- Create "Coming Soon" placeholders for the game routes.
+
+- Mobile-First: Ensure the layout is perfectly responsive.
+
+Ask me any questions you need in order to fully understand what I want from this feature and how I envision it.
+
+This project was built with [Lovable](https://lovable.dev).
+
+**Live app**: https://neon-arcade-lobby.lovable.app
+
+## Build with Lovable
+
+Continue developing this project in the [Lovable editor](https://lovable.dev/projects/46d10378-decd-4901-b63b-b442a009e32c).
+
+- **Ship faster**: describe what you want to build and Lovable handles the code.
+- **Stay in sync**: every change made in Lovable is committed straight to this repository.
+- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+
+## Development
+
+Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
+git clone <this-repository-url>
+cd <repository-name>
 npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
